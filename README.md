@@ -2,7 +2,7 @@
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the system design, SQL model, user flows, and readiness/risk calculation.
 
-Vetted is a Streamlit M&A readiness application that runs locally and on Streamlit Community Cloud. Business owners create an account, answer ten guided questions, and see an overall High, Medium, or Low readiness result. Advisors review the client pipeline, see percentages and response details, and record decisions. The ten questions and answer choices come from `Vetting App for M&A firms - questions and answers.xlsx`.
+Vetted is a Streamlit M&A readiness application that runs locally and on Streamlit Community Cloud. Business owners enter their company name, industry, annual revenue, annual EBITDA, and employee count before creating an account. They then answer ten guided questions and see an overall High, Medium, or Low readiness result. Advisors review the client pipeline, see company metrics and score drivers grouped as Strong, Mixed, or Needs Attention, and record decisions. The ten questions and answer choices come from `Vetting App for M&A firms - questions and answers.xlsx`.
 
 ## Start the app
 
@@ -34,18 +34,18 @@ The app seeds three fictional clients on first launch. Its SQLite database lives
 
 ## Classroom walkthrough
 
-1. On `/business`, select **Create account**. Enter a new business and a password with at least eight characters.
+1. On `/business`, select **Create account**. Enter company name, industry, annual revenue, annual EBITDA, employee count, owner details, and a password with at least eight characters.
 2. Answer the ten questions in the guided wizard and submit. The owner view shows only an overall readiness band, with submitted answers in a separate tab.
 3. Sign out. On `/advisor`, sign in with username **`admin`** and password **`admin`**.
-4. Search for the new business, inspect its score and answer audit, then record an advisor decision.
+4. Search for the new business, inspect its financial and team profile, readiness percentage, grouped drivers, and answer audit, then record an advisor decision.
 
 The advisor pipeline also begins with three sample businesses to make the first demo screen useful. Their old publicly shared owner passwords have been disabled. New business users sign up with their own credentials.
 
 ## Data and scoring
 
-SQLite stores data at `instance/vetted.sqlite3`. The first start creates the database and sample records. Data persists across restarts. [schema.sql](schema.sql) defines firms, advisor users, business users, clients, questions, answer options, responses, and advisor decisions. New business accounts and their questionnaires are written to these tables. Passwords are salted and hashed with PBKDF2-SHA256.
+SQLite stores data at `instance/vetted.sqlite3`. The first start creates the database and sample records. Data persists across restarts. [schema.sql](schema.sql) defines firms, advisor users, business users, clients, questions, answer options, responses, and advisor decisions. New business accounts, their company profile fields, and their questionnaires are written to these tables. Passwords are salted and hashed with PBKDF2-SHA256.
 
-Each High answer contributes 10 points, Medium 5, and Low 0. The owner-facing band is High at 70–100, Medium at 40–69, and Low at 0–39. Advisors see the percentage and inverse risk band. The result is a directional screening tool, not a valuation or a probability of sale.
+Each High answer contributes 10 points, Medium 5, and Low 0. Company revenue, EBITDA, employee count, and EBITDA margin provide context in the advisor view; they do not change the ten-question score. The owner-facing band is High at 70–100, Medium at 40–69, and Low at 0–39. Advisors see the percentage and inverse risk band. The result is a directional screening tool, not a valuation or a probability of sale.
 
 The homepage describes the product and links to the [U.S. Small Business Administration's business management guidance](https://www.sba.gov/counseling/manage-your-business/) for broader sale preparation context.
 

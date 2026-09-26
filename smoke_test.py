@@ -59,6 +59,12 @@ with tempfile.TemporaryDirectory() as temp_dir:
     app.button(key="open_2").click().run()
     assert not app.exception
     assert [title.value for title in app.title] == ["Harborlight Health Services"]
+    assert [metric.label for metric in app.metric][:4] == [
+        "ANNUAL REVENUE", "ANNUAL EBITDA", "EMPLOYEES", "EBITDA MARGIN"
+    ]
+    assert [metric.value for metric in app.metric][:4] == ["$7.2M", "$1.1M", "42", "14.6%"]
+    assert any("DRIVER BREAKDOWN" in item.value for item in app.get("html"))
+    assert any(tab.label == "MIXED (8)" for tab in app.tabs)
     app.button(key="action_clarification").click().run()
     assert get_advisor_client(2, admin["firm_id"])["latest_decision"]["decision"] == "clarification"
 
@@ -73,19 +79,23 @@ with tempfile.TemporaryDirectory() as temp_dir:
     app.text_input(key="signup_business").set_value("Rivera Precision Works")
     app.selectbox(key="signup_industry").set_value("Manufacturing")
     app.number_input(key="signup_revenue").set_value(5_000_000)
+    app.number_input(key="signup_ebitda").set_value(800_000)
+    app.number_input(key="signup_employees").set_value(32)
     app.text_input(key="signup_password").set_value("ClassroomPass123!")
     app.text_input(key="signup_confirm").set_value("ClassroomPass123!")
-    app.button(key="FormSubmitter:business_signup-CREATE ACCOUNT →").click().run()
+    app.button(key="FormSubmitter:business_signup-CREATE ACCOUNT").click().run()
     assert not app.exception
     assert [title.value for title in app.title] == ["Tell us about your business"]
     owner = authenticate_business("sam@example.com", "ClassroomPass123!")
     assert owner is not None
     assert get_business_client(owner["id"])["score"] is None
+    profile = get_business_client(owner["id"])
+    assert (profile["annual_revenue"], profile["ebitda"], profile["employee_count"]) == (5_000_000, 800_000, 32)
     new_client_id = owner["client_id"]
     try:
         create_business_account(
             owner_name="Different Person", email="SAM@example.com", password="SomePassword123",
-            business_name="Duplicate", industry="Other", annual_revenue=1,
+            business_name="Duplicate", industry="Other", annual_revenue=1, ebitda=0, employee_count=1,
         )
     except ValueError:
         pass
@@ -103,6 +113,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
     assert [title.value for title in app.title] == ["Rivera Precision Works"]
     assert get_business_client(owner["id"])["score"] == 100
     assert get_advisor_client(new_client_id, admin["firm_id"])["submitted"]
+    assert get_advisor_client(new_client_id, admin["firm_id"])["ebitda"] == 800_000
     assert not any('class="readiness-number' in item.value for item in app.get("html"))
     with connection() as db:
         assert db.execute(
@@ -112,4 +123,31 @@ with tempfile.TemporaryDirectory() as temp_dir:
             "SELECT decision FROM advisor_decisions WHERE client_id = 2 ORDER BY id DESC LIMIT 1"
         ).fetchone()[0] == "clarification"
 
-print("Vetted smoke test passed: routes, admin, signup, wizard, access, persistence")
+# Existing databases gain the new columns and preserve seeded fixture details.
+with tempfile.TemporaryDirectory() as temp_dir:
+    legacy_path = Path(temp_dir) / "legacy.sqlite3"
+    with connection(legacy_path) as legacy:
+        legacy.execute(
+            "CREATE TABLE clients (id INTEGER PRIMARY KEY AUTOINCREMENT, firm_id INTEGER NOT NULL, "
+            "business_name TEXT NOT NULL, industry TEXT NOT NULL, annual_revenue INTEGER NOT NULL, "
+            "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+        )
+        legacy.execute(
+            "INSERT INTO clients (firm_id, business_name, industry, annual_revenue) "
+            "VALUES (1, 'Legacy Shop', 'Other', 2000000)"
+        )
+    init_db(legacy_path)
+    with connection(legacy_path) as migrated:
+        assert migrated.execute("PRAGMA user_version").fetchone()[0] == 2
+        columns = {row["name"] for row in migrated.execute("PRAGMA table_info(clients)")}
+        assert {"ebitda", "employee_count"} <= columns
+        assert tuple(migrated.execute(
+            "SELECT ebitda, employee_count FROM clients WHERE business_name = ?",
+            ("Northstar Industrial Components",),
+        ).fetchone()) == (3_100_000, 95)
+        assert tuple(migrated.execute(
+            "SELECT ebitda, employee_count FROM clients WHERE business_name = ?",
+            ("Legacy Shop",),
+        ).fetchone()) == (None, None)
+
+print("Vetted smoke test passed: routes, admin, signup, wizard, access, persistence, migration")

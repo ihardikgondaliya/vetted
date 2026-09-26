@@ -22,6 +22,8 @@ CREATE TABLE IF NOT EXISTS clients (
     business_name TEXT NOT NULL,
     industry TEXT NOT NULL,
     annual_revenue INTEGER NOT NULL CHECK (annual_revenue >= 0),
+    ebitda INTEGER,
+    employee_count INTEGER CHECK (employee_count >= 0),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

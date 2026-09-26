@@ -62,11 +62,22 @@ def init_db(path: Path = DB_PATH) -> None:
         if "username" not in columns:
             db.execute("ALTER TABLE advisor_users ADD COLUMN username TEXT")
         db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_advisor_username ON advisor_users(username)")
+        client_columns = {row["name"] for row in db.execute("PRAGMA table_info(clients)")}
+        if "ebitda" not in client_columns:
+            db.execute("ALTER TABLE clients ADD COLUMN ebitda INTEGER")
+        if "employee_count" not in client_columns:
+            db.execute(
+                "ALTER TABLE clients ADD COLUMN employee_count INTEGER "
+                "CHECK (employee_count >= 0)"
+            )
         if db.execute("SELECT COUNT(*) FROM firms").fetchone()[0] == 0:
             _seed_demo(db)
         if db.execute("PRAGMA user_version").fetchone()[0] < 1:
             _migrate_demo_credentials(db)
             db.execute("PRAGMA user_version = 1")
+        if db.execute("PRAGMA user_version").fetchone()[0] < 2:
+            _migrate_business_profile(db)
+            db.execute("PRAGMA user_version = 2")
 
 
 def _seed_demo(db: sqlite3.Connection) -> None:
@@ -93,8 +104,13 @@ def _seed_demo(db: sqlite3.Connection) -> None:
 
     for client in DEMO_CLIENTS:
         client_id = db.execute(
-            "INSERT INTO clients (firm_id, business_name, industry, annual_revenue) VALUES (?, ?, ?, ?)",
-            (firm_id, client["name"], client["industry"], client["annual_revenue"]),
+            "INSERT INTO clients "
+            "(firm_id, business_name, industry, annual_revenue, ebitda, employee_count) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                firm_id, client["name"], client["industry"], client["annual_revenue"],
+                client["ebitda"], client["employee_count"],
+            ),
         ).lastrowid
         # Sample records appear in the advisor pipeline; their owner accounts are
         # intentionally not shared as public demo credentials.
@@ -138,6 +154,16 @@ def _migrate_demo_credentials(db: sqlite3.Connection) -> None:
         )
 
 
+def _migrate_business_profile(db: sqlite3.Connection) -> None:
+    """Backfill profile details for the three existing fictional clients."""
+    for client in DEMO_CLIENTS:
+        db.execute(
+            "UPDATE clients SET ebitda = ?, employee_count = ? "
+            "WHERE id = (SELECT client_id FROM business_users WHERE email = ?)",
+            (client["ebitda"], client["employee_count"], client["owner_email"]),
+        )
+
+
 def authenticate_advisor(username: str, password: str, path: Path = DB_PATH) -> dict | None:
     with connection(path) as db:
         row = db.execute(
@@ -168,6 +194,8 @@ def create_business_account(
     business_name: str,
     industry: str,
     annual_revenue: int,
+    ebitda: int,
+    employee_count: int,
     path: Path = DB_PATH,
 ) -> dict:
     owner_name, email = owner_name.strip(), email.strip().lower()
@@ -180,6 +208,10 @@ def create_business_account(
         raise ValueError("Password must contain at least 8 characters.")
     if not isinstance(annual_revenue, int) or annual_revenue < 0:
         raise ValueError("Annual revenue must be zero or greater.")
+    if not isinstance(ebitda, int):
+        raise ValueError("Enter EBITDA in whole US dollars.")
+    if not isinstance(employee_count, int) or employee_count < 0:
+        raise ValueError("Number of employees must be zero or greater.")
     with connection(path) as db:
         firm = db.execute("SELECT id FROM firms ORDER BY id LIMIT 1").fetchone()
         if not firm:
@@ -187,8 +219,10 @@ def create_business_account(
         if db.execute("SELECT 1 FROM business_users WHERE email = ?", (email,)).fetchone():
             raise ValueError("An account with this email already exists.")
         client_id = db.execute(
-            "INSERT INTO clients (firm_id, business_name, industry, annual_revenue) VALUES (?, ?, ?, ?)",
-            (firm["id"], business_name, industry, annual_revenue),
+            "INSERT INTO clients "
+            "(firm_id, business_name, industry, annual_revenue, ebitda, employee_count) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (firm["id"], business_name, industry, annual_revenue, ebitda, employee_count),
         ).lastrowid
         try:
             user_id = db.execute(

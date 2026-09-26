@@ -99,6 +99,15 @@ h2, h3 { color: #F4F2EC; }
 .mix-row { display: grid; grid-template-columns: 1.2fr 2fr .35fr; gap: .7rem; align-items: center; padding: .6rem 0; border-bottom: 1px solid #292B31; font-size: .7rem; }
 .mix-track i { display: block; height: 100%; border-radius: 10px; background: currentColor; }
 .mix-row b { color: #F0F0ED; text-align: right; }
+.driver-card { background: #111316; border: 1px solid #34363D; border-left: 3px solid #777C85; border-radius: 6px; padding: 1rem 1.1rem; margin: .75rem 0; }
+.driver-card.strong { border-left-color: #00FF66; }
+.driver-card.mixed { border-left-color: #FFB100; }
+.driver-card.attention { border-left-color: #FF6D83; }
+.driver-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.driver-head h4 { color: #F1F0EC; font-size: .9rem; margin: 0; }
+.driver-head span { color: #00F0FF; font-size: .62rem; white-space: nowrap; letter-spacing: .06em; }
+.driver-card p { color: #9FA2A8; font-size: .71rem; line-height: 1.5; margin: .65rem 0; }
+.driver-answer { color: #E2E2DD; font-size: .78rem; line-height: 1.5; }
 .question-index { color: #00F0FF; font-size: .68rem; letter-spacing: .12em; margin: 2.1rem 0 .65rem; }
 .wizard-rule { height: 1px; background: #30323A; margin: 2rem 0 1rem; }
 .owner-result { text-align: center; background: radial-gradient(circle at 50% 0,#19231D,#111316 65%); border: 1px solid #40423F; border-radius: 9px; padding: 2.8rem 1.3rem; margin: 1.3rem 0 1.6rem; }

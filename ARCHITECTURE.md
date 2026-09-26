@@ -65,7 +65,7 @@ erDiagram
 | --- | --- | --- |
 | firms | Advisor firms. | Unique name. One firm is seeded today. |
 | advisor_users | Advisor username, firm, display name, email, password hash. | Unique username and case-insensitive unique email. |
-| clients | Business name, industry, annual revenue, owning firm. | Revenue must be nonnegative. |
+| clients | Business name, industry, annual revenue, annual EBITDA, employee count, owning firm. | Revenue and employee count must be nonnegative. EBITDA may be negative. |
 | business_users | Owner login and the linked client. | Case-insensitive unique email. The current signup creates one client per new owner. |
 | questions | Stable field key, prompt, display order. | Unique key and order from 1 to 10. |
 | answer_options | High, medium, and low text and points for each question. | Rating and points constrained; unique question/rating pair. |
@@ -76,7 +76,7 @@ SQLite foreign keys are enabled for each connection. Connection handling commits
 
 The schema permits multiple business_users rows for one client, although the present signup creates a fresh client for every new account. It also permits fewer or more than ten response rows at the database level; the application requires exactly ten before calculating a score or allowing an advisor decision.
 
-On startup, init_db creates the directory and tables if needed. If there is no firm, it seeds one advisor firm, one advisor account, ten questions with three options each, and three fictional clients. A small user_version migration updates credentials from an earlier demo. Repeated startup calls do not duplicate the seed records.
+On startup, init_db creates the directory and tables if needed. If there is no firm, it seeds one advisor firm, one advisor account, ten questions with three options each, and three fictional clients. Versioned user_version migrations update credentials from an earlier demo and add EBITDA and employee count to existing client tables. The three fictional clients are backfilled with sample profile details. Older owner-created rows keep NULL for fields they never supplied; the advisor view labels them Not provided rather than implying zero. Repeated startup calls do not duplicate the seed records.
 
 The default local database path is instance/vetted.sqlite3. VETTED_DB_PATH can override it, which the smoke test uses to isolate its temporary database.
 
@@ -112,7 +112,7 @@ maximum = 10 questions × 10 points = 100
 minimum = 0
 ~~~
 
-Possible scores are 0, 5, 10, ... 100. The score is displayed as a percentage to advisors because the maximum is 100 points; it is a normalized checklist score, not a measured sale probability.
+Possible scores are 0, 5, 10, ... 100. The score is displayed as a percentage to advisors because the maximum is 100 points; it is a normalized checklist score, not a measured sale probability. Annual revenue, EBITDA, employee count, and computed EBITDA margin are descriptive business profile fields; none contributes points to the scoring function.
 
 | Readiness score | Owner-facing readiness | Advisor-facing risk |
 | --- | --- | --- |
@@ -141,8 +141,8 @@ This is a simple, explainable intake rubric. It does not verify answers, weight 
 
 ### Business owner
 
-1. On /business, the owner signs in or creates an account with name, email, company, industry, revenue, and password.
-2. Signup validates required fields, email shape, unique email, nonnegative revenue, and a password of at least eight characters. It inserts a new client and linked business user in one transaction.
+1. On /business, the owner first enters business name, industry, annual revenue, annual EBITDA, and employee count, then owner name, email, and password in the signup form.
+2. Signup validates required fields, email shape, unique email, nonnegative revenue and employee count, integer EBITDA, and a password of at least eight characters. A negative EBITDA is allowed. It inserts a new client and linked business user in one transaction.
 3. The wizard reads questions and answer text from SQL. Current step and draft ratings live in Streamlit session state; they are not durable until submission.
 4. The owner submits all ten responses once. The result page then shows a readiness band and a separate read-only answer list. It may show a clarification notice if that is the latest advisor decision.
 
@@ -150,7 +150,7 @@ This is a simple, explainable intake rubric. It does not verify answers, weight 
 
 1. On /advisor, the advisor signs in and sees clients for their firm.
 2. The pipeline shows client count, submitted assessment count, average readiness of submitted clients, and count of clients with at least one decision. Search covers company and industry; stage and sort controls refine the list.
-3. Selecting a client opens workflow, score/risk, response audit, signal mix, and decision history.
+3. Selecting a client opens business profile metrics (revenue, EBITDA, employees, and EBITDA margin), workflow, score/risk, signal mix, a grouped driver breakdown, response audit, and decision history. The breakdown separates all ten answers into Strong (10 points), Mixed (5 points), and Needs Attention (0 points) tabs, with each prompt, selected answer, and point contribution visible.
 4. An advisor can append an accepted, rejected, or clarification decision with an optional note up to 1,000 characters, but only after all ten answers exist. The latest decision determines the pipeline stage; previous decisions remain in history.
 
 The workflow bar is derived rather than persisted as separate events. A new profile starts at Profile created; ten responses advance it to Score calculated; any decision advances it to Advisor decision. The second step, Form submitted, is marked complete at the same time as the score because submission and scoring happen together. There is no email delivery, form-sent event, or advisor notification service.
@@ -166,10 +166,10 @@ This is a demo security model: there is no email verification, password reset, l
 - Local: [run_vetted.bat](run_vetted.bat) creates a virtual environment as needed and starts Streamlit bound to 127.0.0.1:8501. SQLite persists on the presenting computer under instance/.
 - Cloud: Streamlit Community Cloud runs app.py from the GitHub repository. The classroom demo is at [vetted-ma-classroom.streamlit.app](https://vetted-ma-classroom.streamlit.app/). The theme comes from .streamlit/config.toml.
 - Storage: Cloud SQLite is a local file in the app container. Streamlit Community Cloud does not guarantee persistence of local files, so owner signups, submissions, and decisions may disappear after a restart or redeploy. The three fictional records are seeded again if the database is recreated.
-- Scale: Each database call opens its own SQLite connection with a ten-second lock timeout. This is adequate for a small demo, but it is not a multi-instance or durable production data layer. There is no backup or migration framework beyond the small credential migration.
+- Scale: Each database call opens its own SQLite connection with a ten-second lock timeout. This is adequate for a small demo, but it is not a multi-instance or durable production data layer. There is no backup or migration framework beyond the small versioned SQLite migrations.
 
 ## Verification and change points
 
-Run the local test with the command in [README.md](README.md). [smoke_test.py](smoke_test.py) uses a temporary database and exercises initial seeding, scoring outcomes for fixtures, login, owner signup, questionnaire submission, advisor decisions, role boundaries, and persistence within that local test. It does not prove cloud storage durability or heavy concurrent usage.
+Run the local test with the command in [README.md](README.md). [smoke_test.py](smoke_test.py) uses a temporary database and exercises initial seeding, scoring outcomes for fixtures, login, owner signup with all business profile fields, questionnaire submission, advisor metrics and driver grouping, advisor decisions, role boundaries, persistence, and migration from a legacy client table within that local test. It does not prove cloud storage durability or heavy concurrent usage.
 
 For changes to the rubric, update the question bank in data.py, the required keys/points/thresholds in scoring.py, and the database seed or migration path together. For historical auditability, store a scoring version and score snapshot at submission. For real deployments, move data to a managed database, secure advisor accounts, and add operational monitoring and backups.

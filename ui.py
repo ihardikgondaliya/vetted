@@ -20,16 +20,33 @@ from database import (
     record_decision,
     submit_business_questionnaire,
 )
-from scoring import risk_band, score_band
+from scoring import POINTS, risk_band, score_band
 
 
 APP_DIR = Path(__file__).resolve().parent
+DRIVER_TITLES = {
+    "team_execution": "Team independence",
+    "owner_sales_reliance": "Sales independence",
+    "relationship_ownership": "Customer relationships",
+    "financial_quality": "Financial reporting",
+    "revenue_growth": "Revenue trajectory",
+    "customer_concentration": "Customer concentration",
+    "key_person_risk": "Key people",
+    "legal_cleanliness": "Legal position",
+    "asset_ownership": "Asset ownership",
+    "process_transferability": "Process transferability",
+}
 def html(markup: str) -> None:
     st.html(markup)
 
 
+def format_money(amount: int, decimals: int = 1) -> str:
+    sign = "-" if amount < 0 else ""
+    return f"{sign}${abs(amount) / 1_000_000:,.{decimals}f}M"
+
+
 def format_revenue(amount: int) -> str:
-    return f"${amount / 1_000_000:,.1f}M"
+    return format_money(amount)
 
 
 def stage_for(client: dict) -> str:
@@ -246,24 +263,38 @@ def _login_form(role: str) -> None:
 
 def _signup_form() -> None:
     with st.form("business_signup", border=True):
-        owner_name = st.text_input("Your name", key="signup_owner")
-        email = st.text_input("Work email", key="signup_email")
+        st.markdown("#### 01 / BUSINESS PROFILE")
         business_name = st.text_input("Business name", key="signup_business")
         industry = st.selectbox(
             "Industry",
             ("Select an industry", "Manufacturing", "Healthcare", "Professional Services", "Food & Beverage", "Technology", "Retail", "Other"),
             key="signup_industry",
         )
-        annual_revenue = st.number_input(
+        revenue_col, ebitda_col = st.columns(2)
+        annual_revenue = revenue_col.number_input(
             "Annual revenue (USD)", min_value=0, max_value=1_000_000_000,
-            value=0, step=100_000, key="signup_revenue",
+            value=None, step=100_000, key="signup_revenue",
         )
+        ebitda = ebitda_col.number_input(
+            "Annual EBITDA (USD)", min_value=-1_000_000_000, max_value=1_000_000_000,
+            value=None, step=50_000, key="signup_ebitda",
+            help="Earnings before interest, taxes, depreciation, and amortization. A negative value is allowed.",
+        )
+        employee_count = st.number_input(
+            "Number of employees", min_value=0, max_value=100_000,
+            value=None, step=1, key="signup_employees",
+        )
+        st.markdown("#### 02 / OWNER ACCOUNT")
+        owner_name = st.text_input("Your name", key="signup_owner")
+        email = st.text_input("Work email", key="signup_email")
         password = st.text_input("Create password", type="password", key="signup_password")
         confirm = st.text_input("Confirm password", type="password", key="signup_confirm")
-        submitted = st.form_submit_button("CREATE ACCOUNT →", type="primary", use_container_width=True)
+        submitted = st.form_submit_button("CREATE ACCOUNT", type="primary", use_container_width=True)
     if submitted:
         if industry == "Select an industry":
             st.error("Choose an industry.")
+        elif annual_revenue is None or ebitda is None or employee_count is None:
+            st.error("Enter annual revenue, annual EBITDA, and number of employees.")
         elif password != confirm:
             st.error("Passwords do not match.")
         else:
@@ -274,7 +305,9 @@ def _signup_form() -> None:
                     password=password,
                     business_name=business_name,
                     industry=industry,
-                    annual_revenue=int(annual_revenue),
+                    annual_revenue=annual_revenue,
+                    ebitda=ebitda,
+                    employee_count=employee_count,
                 )
             except ValueError as exc:
                 st.error(str(exc))
@@ -370,7 +403,18 @@ def render_advisor_detail(user: dict, client_id: int) -> None:
         st.rerun()
     html('<div class="eyebrow">CLIENT AUDIT / ' + escape(stage_for(client)).upper() + '</div>')
     st.title(client["business_name"])
-    st.caption(f'{client["industry"]}  ·  {format_revenue(client["annual_revenue"])} annual revenue')
+    st.caption(client["industry"])
+    section_label("BUSINESS PROFILE")
+    revenue = client["annual_revenue"]
+    ebitda = client["ebitda"]
+    margin = f"{ebitda / revenue * 100:,.1f}%" if revenue and ebitda is not None else "N/A"
+    for column, label, value in zip(
+        st.columns(4),
+        ("ANNUAL REVENUE", "ANNUAL EBITDA", "EMPLOYEES", "EBITDA MARGIN"),
+        (format_money(revenue), format_money(ebitda) if ebitda is not None else "Not provided",
+         f'{client["employee_count"]:,}' if client["employee_count"] is not None else "Not provided", margin),
+    ):
+        column.metric(label, value)
     render_workflow(client)
     if not client["submitted"]:
         st.info("This business has created an account and has not submitted its questionnaire yet.")
@@ -404,14 +448,38 @@ def render_advisor_detail(user: dict, client_id: int) -> None:
                     f'<div class="mix-track"><i class="{color_name}" style="width:{count * 10}%"></i></div>'
                     f'<b>{count:02d}</b></div>'
                 )
-        attention = [response for response in client["responses"] if response["rating"] == "low"]
-        section_label("PRIORITY REVIEW")
-        if attention:
-            for item in attention[:3]:
-                with st.expander(item["prompt"]):
-                    st.write(item["answer_text"])
-        else:
-            st.success("No low-rated responses in this assessment.")
+        section_label("DRIVER BREAKDOWN")
+        st.caption(
+            "Each answer contributes 0, 5, or 10 points to the readiness score. "
+            "The business profile above provides context and does not change the score."
+        )
+        attention_tab, mixed_tab, strong_tab = st.tabs(
+            [
+                f"NEEDS ATTENTION ({counts['low']})",
+                f"MIXED ({counts['medium']})",
+                f"STRONG ({counts['high']})",
+            ]
+        )
+        for tab, rating, empty in (
+            (attention_tab, "low", "No drivers need attention."),
+            (mixed_tab, "medium", "No mixed drivers."),
+            (strong_tab, "high", "No strong drivers."),
+        ):
+            with tab:
+                drivers = [item for item in client["responses"] if item["rating"] == rating]
+                if not drivers:
+                    st.info(empty)
+                for item in drivers:
+                    title = DRIVER_TITLES.get(item["field_key"], item["field_key"].replace("_", " ").title())
+                    css_class = {"low": "attention", "medium": "mixed", "high": "strong"}[rating]
+                    html(
+                        f'<div class="driver-card {css_class}">'
+                        f'<div class="driver-head"><h4>{escape(title)}</h4>'
+                        f'<span>{POINTS[rating]} / 10 POINTS</span></div>'
+                        f'<p>{escape(item["prompt"])}</p>'
+                        f'<div class="driver-answer">{escape(item["answer_text"])}</div>'
+                        '</div>'
+                    )
     with answers:
         section_label("QUESTIONNAIRE AUDIT")
         rating_filter = st.selectbox("Show responses", ("All", "High", "Medium", "Low"))
