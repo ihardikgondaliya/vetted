@@ -58,6 +58,9 @@ def init_db(path: Path = DB_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with connection(path) as db:
         db.executescript(SCHEMA_PATH.read_text(encoding="utf-8"))
+        # Streamlit can start more than one session at once. Serialize schema
+        # inspection and migrations so two sessions cannot add the same column.
+        db.execute("BEGIN IMMEDIATE")
         columns = {row["name"] for row in db.execute("PRAGMA table_info(advisor_users)")}
         if "username" not in columns:
             db.execute("ALTER TABLE advisor_users ADD COLUMN username TEXT")

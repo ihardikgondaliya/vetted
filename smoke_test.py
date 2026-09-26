@@ -150,4 +150,20 @@ with tempfile.TemporaryDirectory() as temp_dir:
             ("Legacy Shop",),
         ).fetchone()) == (None, None)
 
-print("Vetted smoke test passed: routes, admin, signup, wizard, access, persistence, migration")
+# Simultaneous Streamlit sessions must not race while adding old-schema columns.
+from concurrent.futures import ThreadPoolExecutor
+
+with tempfile.TemporaryDirectory() as temp_dir:
+    concurrent_path = Path(temp_dir) / "concurrent.sqlite3"
+    with connection(concurrent_path) as legacy:
+        legacy.execute(
+            "CREATE TABLE clients (id INTEGER PRIMARY KEY AUTOINCREMENT, firm_id INTEGER NOT NULL, "
+            "business_name TEXT NOT NULL, industry TEXT NOT NULL, annual_revenue INTEGER NOT NULL, "
+            "created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+        )
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        list(pool.map(init_db, [concurrent_path] * 3))
+    with connection(concurrent_path) as db:
+        assert db.execute("SELECT COUNT(*) FROM clients").fetchone()[0] == 3
+
+print("Vetted smoke test passed: routes, admin, signup, wizard, access, persistence, migration, concurrency")
