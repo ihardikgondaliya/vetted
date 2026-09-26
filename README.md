@@ -1,6 +1,8 @@
 # Vetted
 
-Vetted is a local M&A readiness application. Business owners create an account, answer ten guided questions, and see an overall High, Medium, or Low readiness result. Advisors review the client pipeline, see percentages and response details, and record decisions. The ten questions and answer choices come from `Vetting App for M&A firms - questions and answers.xlsx`.
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the system design, SQL model, user flows, and readiness/risk calculation.
+
+Vetted is a Streamlit M&A readiness application that runs locally and on Streamlit Community Cloud. Business owners create an account, answer ten guided questions, and see an overall High, Medium, or Low readiness result. Advisors review the client pipeline, see percentages and response details, and record decisions. The ten questions and answer choices come from `Vetting App for M&A firms - questions and answers.xlsx`.
 
 ## Start the app
 
