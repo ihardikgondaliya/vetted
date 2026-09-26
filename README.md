@@ -26,6 +26,10 @@ Open these pages on the presenting computer:
 
 Keep the terminal open while presenting; press `Ctrl+C` to stop. The Windows launcher and PowerShell command bind to the presenting computer only.
 
+## Live classroom app
+
+[Vetted on Streamlit](https://vetted.streamlit.app/) ? [Advisor portal](https://vetted.streamlit.app/advisor) ? [Business owner portal](https://vetted.streamlit.app/business)
+
 ## Deploy for a classroom demo
 
 Push the project to GitHub and create an app at [Streamlit Community Cloud](https://share.streamlit.io/) using `app.py` as the entrypoint. Choose Python 3.12 if prompted. The deployed routes are `/`, `/advisor`, and `/business` under the assigned `*.streamlit.app` URL. The cloud host supplies its own network binding; the local launcher keeps using `127.0.0.1`.

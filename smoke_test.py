@@ -64,6 +64,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
     ]
     assert [metric.value for metric in app.metric][:4] == ["$7.2M", "$1.1M", "42", "14.6%"]
     assert any("DRIVER BREAKDOWN" in item.value for item in app.get("html"))
+    assert any('class="score-track"' in item.value and 'width:60%' in item.value for item in app.get("html"))
     assert any(tab.label == "MIXED (8)" for tab in app.tabs)
     app.button(key="action_clarification").click().run()
     assert get_advisor_client(2, admin["firm_id"])["latest_decision"]["decision"] == "clarification"

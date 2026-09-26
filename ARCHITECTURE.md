@@ -164,7 +164,7 @@ This is a demo security model: there is no email verification, password reset, l
 ## Runtime and deployment
 
 - Local: [run_vetted.bat](run_vetted.bat) creates a virtual environment as needed and starts Streamlit bound to 127.0.0.1:8501. SQLite persists on the presenting computer under instance/.
-- Cloud: Streamlit Community Cloud runs app.py from the GitHub repository. The classroom demo is at [vetted-ma-classroom.streamlit.app](https://vetted-ma-classroom.streamlit.app/). The theme comes from .streamlit/config.toml.
+- Cloud: Streamlit Community Cloud runs app.py from the GitHub repository. The classroom demo is at [vetted.streamlit.app](https://vetted.streamlit.app/). The theme comes from .streamlit/config.toml.
 - Storage: Cloud SQLite is a local file in the app container. Streamlit Community Cloud does not guarantee persistence of local files, so owner signups, submissions, and decisions may disappear after a restart or redeploy. The three fictional records are seeded again if the database is recreated.
 - Scale: Each database call opens its own SQLite connection with a ten-second lock timeout. This is adequate for a small demo, but it is not a multi-instance or durable production data layer. There is no backup or migration framework beyond the small versioned SQLite migrations.
 

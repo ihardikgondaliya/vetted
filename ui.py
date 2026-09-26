@@ -433,7 +433,11 @@ def render_advisor_detail(user: dict, client_id: int) -> None:
                 f'<div class="risk-label {color}">{risk.upper()} RISK</div>'
                 '<p>Higher readiness indicates fewer concerns across the ten vetting signals.</p></div>'
             )
-            st.progress(score / 100, text="Overall readiness")
+            html(
+                f'<div class="score-track" role="progressbar" aria-label="Overall readiness" '
+                f'aria-valuemin="0" aria-valuemax="100" aria-valuenow="{score}">'
+                f'<i style="width:{score}%"></i></div>'
+            )
         with right:
             counts = Counter(response["rating"] for response in client["responses"])
             section_label("SIGNAL MIX")
