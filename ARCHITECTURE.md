@@ -15,7 +15,7 @@ flowchart LR
     Store --> Seed["data.py: question bank and demo clients"]
     Store --> Schema["schema.sql"]
     Store --> SQLite[("SQLite: instance/vetted.sqlite3")]
-    UI --> Style["styles.css and assets/vetted-mark.svg"]
+    UI --> Style["styles.css and assets/vetted-mark.png"]
 ~~~
 
 The application is one Python process. Streamlit reruns the relevant page script after user interactions. There is no separate REST API, background worker, message queue, or external database. SQL access is centralized in database.py; the interface does not write directly to SQLite.
@@ -29,7 +29,7 @@ The application is one Python process. Streamlit reruns the relevant page script
 | [data.py](data.py) | The ten question prompts and answer choices, plus three fictional seed clients. The questions were transcribed from the supplied workbook. |
 | [database.py](database.py) | Connection and transaction handling, schema initialization, seed data, authentication, ownership checks, questionnaire storage, client reads, and decision history. |
 | [schema.sql](schema.sql) | Eight SQL tables, constraints, foreign keys, and indexes. |
-| [styles.css](styles.css), [assets/vetted-mark.svg](assets/vetted-mark.svg) | Bloomberg-inspired dark visual system and brand mark. |
+| [styles.css](styles.css), [assets/vetted-mark.png](assets/vetted-mark.png) | Bloomberg-inspired dark visual system and header mark. The editable vector source is [assets/vetted-mark.svg](assets/vetted-mark.svg). |
 | [smoke_test.py](smoke_test.py) | Isolated end-to-end checks using a temporary SQLite database. |
 
 ## Routes and access

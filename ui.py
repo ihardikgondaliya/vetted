@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+import base64
 from html import escape
 from pathlib import Path
 
@@ -74,10 +75,11 @@ def render_header(role: str = "home") -> None:
     st.html(APP_DIR / "styles.css")
     brand, controls = st.columns([3.7, 1.8], vertical_alignment="center")
     with brand:
-        mark_svg = (APP_DIR / "assets" / "vetted-mark.svg").read_text(encoding="utf-8")
+        mark_png = base64.b64encode((APP_DIR / "assets" / "vetted-mark.png").read_bytes()).decode("ascii")
         html(
             '<a class="brand-lockup" href="/" aria-label="Vetted home">'
-            f'{mark_svg}<span class="brand-copy">'
+            f'<img src="data:image/png;base64,{mark_png}" alt="" width="46" height="46">'
+            '<span class="brand-copy">'
             '<span class="brand-name">VETTED<span>.</span></span>'
             '<span class="brand-caption">DEAL READINESS, MADE CLEAR</span>'
             '</span></a>'

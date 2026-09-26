@@ -21,7 +21,7 @@ h2, h3 { color: #F4F2EC; }
 .brand-lockup:hover .brand-name { color: #FFB100; }
 .brand-lockup:focus-visible { outline: 2px solid #00F0FF; outline-offset: 6px; border-radius: 4px; }
 .brand-copy { display: flex; flex-direction: column; }
-.brand-lockup svg { flex: none; width: 46px; height: 46px; }
+.brand-lockup img { display: block; flex: none; width: 46px; height: 46px; object-fit: contain; }
 .brand-name { font-size: 1.46rem; line-height: 1; font-weight: 900; letter-spacing: .13em; color: #F4F2EC; }
 .brand-name span { color: #FFB100; }
 .brand-caption { margin-top: .4rem; font-size: .57rem; letter-spacing: .18em; color: #898B93; }
