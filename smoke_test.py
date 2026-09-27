@@ -10,9 +10,11 @@ from streamlit.testing.v1 import AppTest
 with tempfile.TemporaryDirectory() as temp_dir:
     os.environ["VETTED_DB_PATH"] = str(Path(temp_dir) / "vetted-test.sqlite3")
 
+    from ui import stage_for
     from database import (  # imported after setting the isolated database path
         authenticate_advisor,
         authenticate_business,
+        business_decision_history,
         connection,
         create_business_account,
         get_advisor_client,
@@ -20,6 +22,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
         init_db,
         list_advisor_clients,
         record_decision,
+        respond_to_clarification,
     )
 
     init_db()
@@ -68,6 +71,8 @@ with tempfile.TemporaryDirectory() as temp_dir:
     assert any('class="timeline-panel"' in item.value and '03 / 04 COMPLETE' in item.value
                and 'timeline-step current' in item.value for item in app.get("html"))
     assert any(tab.label == "MIXED (8)" for tab in app.tabs)
+    next(field for field in app.text_area if field.label == "Message to business owner").set_value("Please provide the missing contract details.").run()
+    next(field for field in app.text_area if field.label == "Internal advisor note").set_value("Internal diligence note.").run()
     app.button(key="action_clarification").click().run()
     assert get_advisor_client(2, admin["firm_id"])["latest_decision"]["decision"] == "clarification"
     assert any("04 / 04 COMPLETE" in item.value for item in app.get("html"))
@@ -121,6 +126,91 @@ with tempfile.TemporaryDirectory() as temp_dir:
     assert get_advisor_client(new_client_id, admin["firm_id"])["submitted"]
     assert get_advisor_client(new_client_id, admin["firm_id"])["ebitda"] == 800_000
     assert not any('class="readiness-number' in item.value for item in app.get("html"))
+    assert any("AWAITING ADVISOR REVIEW" in item.value for item in app.get("html"))
+
+    # Exercise the live two-session path: advisor update, owner refresh, owner
+    # clarification reply, then both final decision outcomes.
+    advisor_app = AppTest.from_file("app.py").run()
+    advisor_app.switch_page("pages/advisor.py").run()
+    advisor_app.text_input[0].set_value("admin")
+    advisor_app.text_input[1].set_value("admin")
+    next(button for button in advisor_app.button if button.label.startswith("SIGN IN")).click().run()
+    advisor_app.button(key=f"open_{new_client_id}").click().run()
+    assert not advisor_app.exception
+    advisor_app.button(key="action_clarification").click().run()
+    assert get_advisor_client(new_client_id, admin["firm_id"])["latest_decision"] is None
+    assert any("Enter a message telling the owner" in str(item.value) for item in advisor_app.error)
+
+    next(field for field in advisor_app.text_area if field.label == "Message to business owner").set_value("Please identify the customer contracts that renew next year.").run()
+    next(field for field in advisor_app.text_area if field.label == "Internal advisor note").set_value("Internal valuation concern: check contract terms.").run()
+    advisor_app.button(key="action_clarification").click().run()
+    latest = get_advisor_client(new_client_id, admin["firm_id"])["latest_decision"]
+    assert latest["decision"] == "clarification"
+    assert latest["owner_message"] == "Please identify the customer contracts that renew next year."
+    assert "note" not in get_business_client(owner["id"])["latest_decision"]
+    app.button(key="owner_refresh").click().run()
+    assert not app.exception
+    assert any("CLARIFICATION REQUESTED" in item.value for item in app.get("html"))
+    assert any("Please identify the customer contracts" in item.value for item in app.get("html"))
+    assert all("Internal valuation concern" not in str(item.value) for item in app.get("html"))
+    assert all("note" not in update for update in business_decision_history(owner["id"]))
+    unrelated_owner = create_business_account(
+        owner_name="Taylor Lee", email="taylor@example.com", password="ClassroomPass123!",
+        business_name="Separate Workshop", industry="Manufacturing",
+        annual_revenue=1_000_000, ebitda=100_000, employee_count=8,
+    )
+    assert business_decision_history(unrelated_owner["id"]) == []
+    try:
+        respond_to_clarification(unrelated_owner["id"], "A response for someone else's request")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Unrelated owner replied to another client's clarification")
+
+    reply = "The three renewals are scheduled for March, June, and October."
+    next(field for field in app.text_area if field.label == "Reply to the advisor").set_value(reply).run()
+    next(button for button in app.button if button.label == "SEND CLARIFICATION").click().run()
+    assert not app.exception
+    assert get_business_client(owner["id"])["latest_decision"]["reply_message"] == reply
+    assert any("CLARIFICATION SENT" in item.value for item in app.get("html"))
+    try:
+        respond_to_clarification(owner["id"], "A duplicate reply")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Duplicate clarification reply was accepted")
+    advisor_app.run()
+    assert any("Owner clarification received" in str(item.value) for item in advisor_app.info)
+    assert any(reply in str(item.value) for item in advisor_app.markdown)
+    assert stage_for(get_advisor_client(new_client_id, admin["firm_id"])) == "Clarification received"
+
+    next(field for field in advisor_app.text_area if field.label == "Message to business owner").set_value("We would like to discuss representing your business.").run()
+    advisor_app.button(key="action_accepted").click().run()
+    app.button(key="owner_refresh").click().run()
+    assert any("REPRESENTATION ACCEPTED" in item.value for item in app.get("html"))
+    assert any("We would like to discuss representing" in item.value for item in app.get("html"))
+    assert stage_for(get_advisor_client(new_client_id, admin["firm_id"])) == "Accepted"
+
+    next(field for field in advisor_app.text_area if field.label == "Message to business owner").set_value("After further review, we cannot take this engagement.").run()
+    advisor_app.button(key="action_rejected").click().run()
+    app.button(key="owner_refresh").click().run()
+    assert any("NOT MOVING FORWARD" in item.value for item in app.get("html"))
+    assert any("After further review" in item.value for item in app.get("html"))
+    assert stage_for(get_advisor_client(new_client_id, admin["firm_id"])) == "Rejected"
+    assert len(business_decision_history(owner["id"])) == 3
+    returning_owner = AppTest.from_file("app.py").run()
+    returning_owner.switch_page("pages/business.py").run()
+    next(field for field in returning_owner.text_input if field.label == "Email address").set_value("sam@example.com")
+    next(field for field in returning_owner.text_input if field.label == "Password").set_value("ClassroomPass123!")
+    next(button for button in returning_owner.button if button.label.startswith("SIGN IN")).click().run()
+    assert not returning_owner.exception
+    assert any("NOT MOVING FORWARD" in item.value for item in returning_owner.get("html"))
+    try:
+        respond_to_clarification(owner["id"], "Too late")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Reply after final decision was accepted")
     with connection() as db:
         assert db.execute(
             "SELECT COUNT(*) FROM questionnaire_responses WHERE client_id = ?", (new_client_id,)
@@ -142,11 +232,23 @@ with tempfile.TemporaryDirectory() as temp_dir:
             "INSERT INTO clients (firm_id, business_name, industry, annual_revenue) "
             "VALUES (1, 'Legacy Shop', 'Other', 2000000)"
         )
+        legacy.execute(
+            "CREATE TABLE advisor_decisions (id INTEGER PRIMARY KEY, client_id INTEGER NOT NULL "
+            "REFERENCES clients(id), advisor_user_id INTEGER NOT NULL REFERENCES advisor_users(id), "
+            "decision TEXT NOT NULL, note TEXT NOT NULL DEFAULT '', "
+            "decided_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+        )
     init_db(legacy_path)
     with connection(legacy_path) as migrated:
-        assert migrated.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert migrated.execute("PRAGMA user_version").fetchone()[0] == 3
         columns = {row["name"] for row in migrated.execute("PRAGMA table_info(clients)")}
         assert {"ebitda", "employee_count"} <= columns
+        decision_columns = {row["name"] for row in migrated.execute("PRAGMA table_info(advisor_decisions)")}
+        assert "owner_message" in decision_columns
+        assert migrated.execute(
+            "SELECT owner_message FROM advisor_decisions LIMIT 1"
+        ).fetchone()[0] == ""
+        assert migrated.execute("SELECT name FROM sqlite_master WHERE name = 'clarification_replies'").fetchone()
         assert tuple(migrated.execute(
             "SELECT ebitda, employee_count FROM clients WHERE business_name = ?",
             ("Northstar Industrial Components",),
@@ -172,4 +274,4 @@ with tempfile.TemporaryDirectory() as temp_dir:
     with connection(concurrent_path) as db:
         assert db.execute("SELECT COUNT(*) FROM clients").fetchone()[0] == 3
 
-print("Vetted smoke test passed: routes, admin, signup, wizard, access, persistence, migration, concurrency")
+print("Vetted smoke test passed: routes, signup, wizard, all decisions, owner updates, replies, access, migration, concurrency")

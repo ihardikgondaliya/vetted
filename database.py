@@ -73,6 +73,9 @@ def init_db(path: Path = DB_PATH) -> None:
                 "ALTER TABLE clients ADD COLUMN employee_count INTEGER "
                 "CHECK (employee_count >= 0)"
             )
+        decision_columns = {row["name"] for row in db.execute("PRAGMA table_info(advisor_decisions)")}
+        if "owner_message" not in decision_columns:
+            db.execute("ALTER TABLE advisor_decisions ADD COLUMN owner_message TEXT NOT NULL DEFAULT ''")
         if db.execute("SELECT COUNT(*) FROM firms").fetchone()[0] == 0:
             _seed_demo(db)
         if db.execute("PRAGMA user_version").fetchone()[0] < 1:
@@ -81,6 +84,8 @@ def init_db(path: Path = DB_PATH) -> None:
         if db.execute("PRAGMA user_version").fetchone()[0] < 2:
             _migrate_business_profile(db)
             db.execute("PRAGMA user_version = 2")
+        if db.execute("PRAGMA user_version").fetchone()[0] < 3:
+            db.execute("PRAGMA user_version = 3")
 
 
 def _seed_demo(db: sqlite3.Connection) -> None:
@@ -304,8 +309,12 @@ def _responses(db: sqlite3.Connection, client_id: int) -> list[dict]:
 def _latest_decision(db: sqlite3.Connection, client_id: int) -> dict | None:
     row = db.execute(
         """
-        SELECT d.decision, d.note, d.decided_at, a.display_name AS advisor_name
-        FROM advisor_decisions AS d JOIN advisor_users AS a ON a.id = d.advisor_user_id
+        SELECT d.id, d.decision, d.note, d.owner_message, d.decided_at,
+               a.display_name AS advisor_name,
+               r.message AS reply_message, r.created_at AS replied_at
+        FROM advisor_decisions AS d
+        JOIN advisor_users AS a ON a.id = d.advisor_user_id
+        LEFT JOIN clarification_replies AS r ON r.decision_id = d.id
         WHERE d.client_id = ? ORDER BY d.id DESC LIMIT 1
         """,
         (client_id,),
@@ -351,7 +360,10 @@ def get_business_client(business_user_id: int, path: Path = DB_PATH) -> dict | N
         row = db.execute(
             "SELECT client_id FROM business_users WHERE id = ?", (business_user_id,)
         ).fetchone()
-        return _client_record(db, row["client_id"]) if row else None
+        client = _client_record(db, row["client_id"]) if row else None
+        if client and client["latest_decision"]:
+            client["latest_decision"].pop("note", None)
+        return client
 
 
 def decision_history(client_id: int, firm_id: int, path: Path = DB_PATH) -> list[dict]:
@@ -362,8 +374,12 @@ def decision_history(client_id: int, firm_id: int, path: Path = DB_PATH) -> list
             raise PermissionError("Client does not belong to this advisor firm")
         rows = db.execute(
             """
-            SELECT d.decision, d.note, d.decided_at, a.display_name AS advisor_name
-            FROM advisor_decisions AS d JOIN advisor_users AS a ON a.id = d.advisor_user_id
+            SELECT d.id, d.decision, d.note, d.owner_message, d.decided_at,
+                   a.display_name AS advisor_name,
+                   r.message AS reply_message, r.created_at AS replied_at
+            FROM advisor_decisions AS d
+            JOIN advisor_users AS a ON a.id = d.advisor_user_id
+            LEFT JOIN clarification_replies AS r ON r.decision_id = d.id
             WHERE d.client_id = ? ORDER BY d.id DESC
             """,
             (client_id,),
@@ -378,9 +394,15 @@ def record_decision(
     decision: str,
     note: str = "",
     path: Path = DB_PATH,
+    owner_message: str = "",
 ) -> None:
     if decision not in {"accepted", "rejected", "clarification"}:
         raise ValueError("Invalid decision")
+    owner_message = owner_message.strip()
+    if decision == "clarification" and not owner_message:
+        raise ValueError("Enter a message telling the owner what needs clarification.")
+    if len(owner_message) > 1000:
+        raise ValueError("Owner message must be 1,000 characters or fewer.")
     with connection(path) as db:
         client = db.execute(
             "SELECT 1 FROM clients WHERE id = ? AND firm_id = ?", (client_id, firm_id)
@@ -396,6 +418,62 @@ def record_decision(
         if count != len(QUESTIONS):
             raise ValueError("Complete questionnaire required before an advisor decision")
         db.execute(
-            "INSERT INTO advisor_decisions (client_id, advisor_user_id, decision, note) VALUES (?, ?, ?, ?)",
-            (client_id, advisor_user_id, decision, note.strip()[:1000]),
+            "INSERT INTO advisor_decisions "
+            "(client_id, advisor_user_id, decision, note, owner_message) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (client_id, advisor_user_id, decision, note.strip()[:1000], owner_message),
         )
+
+
+def business_decision_history(business_user_id: int, path: Path = DB_PATH) -> list[dict]:
+    """Return owner-visible advisor updates for the signed-in owner's client."""
+    with connection(path) as db:
+        owner = db.execute(
+            "SELECT client_id FROM business_users WHERE id = ?", (business_user_id,)
+        ).fetchone()
+        if not owner:
+            raise PermissionError("Business account not found")
+        rows = db.execute(
+            """
+            SELECT d.id, d.decision, d.owner_message, d.decided_at,
+                   a.display_name AS advisor_name,
+                   r.message AS reply_message, r.created_at AS replied_at
+            FROM advisor_decisions AS d
+            JOIN advisor_users AS a ON a.id = d.advisor_user_id
+            LEFT JOIN clarification_replies AS r ON r.decision_id = d.id
+            WHERE d.client_id = ? ORDER BY d.id DESC
+            """,
+            (owner["client_id"],),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def respond_to_clarification(
+    business_user_id: int, message: str, path: Path = DB_PATH
+) -> None:
+    """Attach one owner reply to the latest clarification request only."""
+    message = message.strip()
+    if not message or len(message) > 2000:
+        raise ValueError("Enter a reply of 1 to 2,000 characters.")
+    with connection(path) as db:
+        db.execute("BEGIN IMMEDIATE")
+        owner = db.execute(
+            "SELECT client_id FROM business_users WHERE id = ?", (business_user_id,)
+        ).fetchone()
+        if not owner:
+            raise PermissionError("Business account not found")
+        decision = db.execute(
+            "SELECT id, decision FROM advisor_decisions WHERE client_id = ? "
+            "ORDER BY id DESC LIMIT 1",
+            (owner["client_id"],),
+        ).fetchone()
+        if not decision or decision["decision"] != "clarification":
+            raise ValueError("There is no current clarification request to answer.")
+        try:
+            db.execute(
+                "INSERT INTO clarification_replies "
+                "(client_id, decision_id, business_user_id, message) VALUES (?, ?, ?, ?)",
+                (owner["client_id"], decision["id"], business_user_id, message),
+            )
+        except sqlite3.IntegrityError as exc:
+            raise ValueError("A reply has already been sent for this request.") from exc

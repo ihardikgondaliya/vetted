@@ -12,6 +12,7 @@ import streamlit as st
 from database import (
     authenticate_advisor,
     authenticate_business,
+    business_decision_history,
     create_business_account,
     decision_history,
     get_advisor_client,
@@ -19,6 +20,7 @@ from database import (
     list_advisor_clients,
     questionnaire_questions,
     record_decision,
+    respond_to_clarification,
     submit_business_questionnaire,
 )
 from scoring import POINTS, risk_band, score_band
@@ -54,6 +56,8 @@ def stage_for(client: dict) -> str:
     if not client["submitted"]:
         return "Questionnaire open"
     decision = client["latest_decision"]
+    if decision and decision["decision"] == "clarification" and decision["reply_message"]:
+        return "Clarification received"
     return {
         None: "Awaiting decision",
         "accepted": "Accepted",
@@ -379,7 +383,7 @@ def render_advisor_list(user: dict) -> None:
     search_col, stage_col, sort_col = st.columns([2.2, 1.2, 1.2])
     search = search_col.text_input("Search", placeholder="Company or industry", key="advisor_search").strip().casefold()
     stage_filter = stage_col.selectbox(
-        "Stage", ("All stages", "Questionnaire open", "Awaiting decision", "Accepted", "Rejected", "Clarification requested"),
+        "Stage", ("All stages", "Questionnaire open", "Awaiting decision", "Accepted", "Rejected", "Clarification requested", "Clarification received"),
     )
     sort = sort_col.selectbox("Sort", ("Company A–Z", "Highest score", "Lowest score", "Newest first"))
     rows = [
@@ -413,6 +417,7 @@ def render_advisor_list(user: dict) -> None:
                 "Accepted": "accepted",
                 "Rejected": "rejected",
                 "Clarification requested": "clarification",
+                "Clarification received": "received",
                 "Questionnaire open": "open",
             }.get(stage, "awaiting")
             status.markdown(
@@ -541,7 +546,22 @@ def render_advisor_detail(user: dict, client_id: int) -> None:
         notice = st.session_state.pop("decision_notice", None)
         if notice:
             st.success(notice)
-        note = st.text_area("Decision note", placeholder="Context or clarification request (optional)", max_chars=1000)
+        if client["latest_decision"] and client["latest_decision"]["reply_message"]:
+            st.info("Owner clarification received. Review the reply below before recording the next decision.")
+        draft_suffix = f"{client_id}_{client['latest_decision']['id'] if client['latest_decision'] else 0}"
+        owner_message = st.text_area(
+            "Message to business owner",
+            placeholder="Explain your decision or tell the owner exactly what needs clarification.",
+            max_chars=1000,
+            key=f"decision_owner_message_{draft_suffix}",
+        )
+        st.caption("Required for clarification. The owner can read this message in their portal.")
+        note = st.text_area(
+            "Internal advisor note",
+            placeholder="Private context for the advisor team (optional)",
+            max_chars=1000,
+            key=f"decision_internal_note_{draft_suffix}",
+        )
         accept, reject, clarify = st.columns(3)
         for column, label, decision, kind in (
             (accept, "ACCEPT REPRESENTATION", "accepted", "primary"),
@@ -549,19 +569,34 @@ def render_advisor_detail(user: dict, client_id: int) -> None:
             (clarify, "REQUEST CLARIFICATION", "clarification", "secondary"),
         ):
             if column.button(label, key=f"action_{decision}", type=kind, use_container_width=True):
-                record_decision(client_id, user["id"], user["firm_id"], decision, note)
-                st.session_state.decision_notice = "Decision saved to the audit history."
-                st.rerun()
+                try:
+                    record_decision(
+                        client_id, user["id"], user["firm_id"], decision,
+                        note=note, owner_message=owner_message,
+                    )
+                except ValueError as exc:
+                    st.error(str(exc))
+                else:
+                    st.session_state.decision_notice = "Decision saved. The owner portal now shows this update."
+                    st.rerun()
         section_label("DECISION HISTORY")
         history = decision_history(client_id, user["firm_id"])
         if not history:
             st.info("No decisions have been recorded for this client.")
         for item in history:
             with st.container(border=True):
-                st.markdown(f"**{item['decision'].replace('_', ' ').title()}**  ·  {item['decided_at']} UTC")
+                st.markdown(f"**{item['decision'].replace('_', ' ').title()}**  /  {item['decided_at']} UTC")
                 st.caption(f"Recorded by {item['advisor_name']}")
+                if item["owner_message"]:
+                    st.markdown("**Shown to owner**")
+                    st.write(item["owner_message"])
                 if item["note"]:
+                    st.markdown("**Internal note**")
                     st.write(item["note"])
+                if item["reply_message"]:
+                    st.markdown(f"**Owner reply**  /  {item['replied_at']} UTC")
+                    st.write(item["reply_message"])
+
 
 
 def render_advisor() -> None:
@@ -630,7 +665,87 @@ def render_owner_wizard(user: dict, client: dict) -> None:
             st.rerun()
 
 
-def render_owner_result(client: dict) -> None:
+def render_owner_status(user: dict, client: dict) -> None:
+    """Show the persisted advisor state and any action available to the owner."""
+    decision = client["latest_decision"]
+    if decision is None:
+        label, tone = "AWAITING ADVISOR REVIEW", "awaiting"
+        description = "Your assessment is with the advisor. Check here for their next update."
+    elif decision["decision"] == "accepted":
+        label, tone = "REPRESENTATION ACCEPTED", "accepted"
+        description = "The advisor has marked your business as accepted for representation. Connect with them to discuss next steps."
+    elif decision["decision"] == "rejected":
+        label, tone = "NOT MOVING FORWARD", "rejected"
+        description = "The advisor has decided not to move forward with representation at this time."
+    elif decision["reply_message"]:
+        label, tone = "CLARIFICATION SENT", "received"
+        description = "Your response is recorded. The advisor can review it and update the decision."
+    else:
+        label, tone = "CLARIFICATION REQUESTED", "clarification"
+        description = "The advisor needs more information. Reply below to keep the review moving."
+
+    final = decision is not None and decision["decision"] in {"accepted", "rejected"}
+    details = (
+        ("Business profile", "Complete", "done"),
+        ("Assessment", "Submitted", "done"),
+        ("Advisor review", "Complete" if final else "In progress", "done" if final else "current"),
+        ("Outcome", "Recorded" if final else "Pending", "done" if final else "upcoming"),
+    )
+    steps = "".join(
+        f'<li class="owner-flow-step {state}"><span>{index:02d}</span>'
+        f'<strong>{title}</strong><small>{detail}</small></li>'
+        for index, (title, detail, state) in enumerate(details, start=1)
+    )
+    updated = f'LAST UPDATE / {escape(decision["decided_at"])} UTC' if decision else "LAST UPDATE / ASSESSMENT SUBMITTED"
+    html(
+        f'<section class="owner-status {tone}" aria-label="Advisor update" aria-live="polite">'
+        '<div class="owner-status-top"><span>ADVISOR UPDATE</span>'
+        f'<span>{updated}</span></div>'
+        f'<div class="owner-status-title">{label}</div>'
+        f'<p>{escape(description)}</p>'
+        + (f'<div class="owner-message"><span>MESSAGE FROM ADVISOR</span>'
+           f'<p>{escape(decision["owner_message"])}</p></div>'
+           if decision and decision["owner_message"] else "")
+        + '<ol class="owner-flow">' + steps + '</ol></section>'
+    )
+    st.button("CHECK FOR UPDATES", key="owner_refresh")
+    st.caption("Advisor updates appear here when you sign in or check for updates.")
+
+    if decision and decision["decision"] == "clarification" and not decision["reply_message"]:
+        with st.form("clarification_reply", clear_on_submit=True):
+            reply = st.text_area(
+                "Reply to the advisor", max_chars=2000,
+                placeholder="Answer the advisor's question or explain the missing detail.",
+            )
+            if st.form_submit_button("SEND CLARIFICATION", type="primary"):
+                try:
+                    respond_to_clarification(user["id"], reply)
+                except ValueError as exc:
+                    st.error(str(exc))
+                else:
+                    st.rerun()
+    elif decision and decision["decision"] == "clarification" and decision["reply_message"]:
+        st.success("Your clarification was sent to the advisor.")
+
+    updates = business_decision_history(user["id"])
+    if updates:
+        with st.expander(f"UPDATE HISTORY / {len(updates)} ADVISOR UPDATE(S)"):
+            for item in updates:
+                with st.container(border=True):
+                    title = {
+                        "accepted": "Representation accepted",
+                        "rejected": "Not moving forward",
+                        "clarification": "Clarification requested",
+                    }[item["decision"]]
+                    st.markdown(f"**{title}**  /  {item['decided_at']} UTC")
+                    if item["owner_message"]:
+                        st.write(item["owner_message"])
+                    if item["reply_message"]:
+                        st.markdown(f"**Your reply**  /  {item['replied_at']} UTC")
+                        st.write(item["reply_message"])
+
+
+def render_owner_result(user: dict, client: dict) -> None:
     band = score_band(client["score"])
     color = band_class(band)
     messages = {
@@ -640,29 +755,27 @@ def render_owner_result(client: dict) -> None:
     }
     html('<div class="eyebrow">BUSINESS OWNER / PRIVATE RESULT</div>')
     st.title(client["business_name"])
-    st.caption("Your submitted assessment, in one clear view.")
-    overview, answers = st.tabs(["YOUR RESULT", "YOUR ANSWERS"])
+    st.caption("Your readiness result and advisor updates, in one clear view.")
+    overview, answers = st.tabs(["YOUR DASHBOARD", "YOUR ANSWERS"])
     with overview:
         html(
             f'<div class="owner-result {color}"><div class="card-label">OVERALL SALE READINESS</div>'
             f'<div class="owner-result-band {color}">{band.upper()}</div>'
             f'<p>{escape(messages[band])}</p><div class="result-meta">10 / 10 ANSWERS SUBMITTED</div></div>'
         )
-        section_label("WHAT HAPPENS NEXT")
-        with st.container(border=True):
-            st.markdown("**Your assessment is complete.**")
-            st.write(
-                "Your answers are available for advisor review. This result is a starting point "
-                "for a conversation about preparation, not a valuation or promise of a sale."
-            )
-        if client["latest_decision"] and client["latest_decision"]["decision"] == "clarification":
-            st.info("An advisor has requested clarification. Contact your advisor for the next step.")
+        render_owner_status(user, client)
+        section_label("ABOUT THIS RESULT")
+        st.caption(
+            "Your answers are available for advisor review. Readiness is a starting point "
+            "for a conversation, not a valuation or promise of a sale."
+        )
     with answers:
         section_label("SUBMITTED QUESTIONNAIRE")
         st.caption("Read-only copy of your ten responses")
         for answer in client["responses"]:
             with st.expander(f'{answer["display_order"]:02d}  /  {answer["prompt"]}'):
                 st.write(answer["answer_text"])
+
 
 
 def render_business() -> None:
@@ -676,6 +789,6 @@ def render_business() -> None:
         st.error("Your business record could not be found.")
         return
     if client["submitted"]:
-        render_owner_result(client)
+        render_owner_result(user, client)
     else:
         render_owner_wizard(user, client)

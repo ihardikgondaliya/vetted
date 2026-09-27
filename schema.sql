@@ -69,9 +69,20 @@ CREATE TABLE IF NOT EXISTS advisor_decisions (
     advisor_user_id INTEGER NOT NULL REFERENCES advisor_users(id),
     decision TEXT NOT NULL CHECK (decision IN ('accepted', 'rejected', 'clarification')),
     note TEXT NOT NULL DEFAULT '',
+    owner_message TEXT NOT NULL DEFAULT '',
     decided_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS clarification_replies (
+    id INTEGER PRIMARY KEY,
+    client_id INTEGER NOT NULL REFERENCES clients(id),
+    decision_id INTEGER NOT NULL UNIQUE REFERENCES advisor_decisions(id),
+    business_user_id INTEGER NOT NULL REFERENCES business_users(id),
+    message TEXT NOT NULL CHECK (length(trim(message)) BETWEEN 1 AND 2000),
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_replies_client ON clarification_replies(client_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_clients_firm ON clients(firm_id);
 CREATE INDEX IF NOT EXISTS idx_responses_client ON questionnaire_responses(client_id);
 CREATE INDEX IF NOT EXISTS idx_decisions_client ON advisor_decisions(client_id, id DESC);
