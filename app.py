@@ -11,6 +11,7 @@ st.set_page_config(
     page_title="Vetted | Deal Readiness",
     page_icon=Path(__file__).resolve().parent / "assets" / "vetted-mark.png",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 init_db()
 
