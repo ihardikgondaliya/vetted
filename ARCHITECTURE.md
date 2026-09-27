@@ -1,6 +1,12 @@
 # Vetted architecture
 
-This document describes the implementation in this repository. Vetted is a Streamlit classroom demo for screening a small or medium business before an M&A sale conversation. It has a public company page, a business-owner assessment, and an advisor review desk. The assessment is a directional screening aid, not a valuation, a verified due-diligence report, or a probability of closing a sale.
+This document describes the implementation in this repository. Vetted is a Streamlit classroom demo for screening a small or medium business before an M&A sale conversation. It has a public product page, a business-owner assessment, and an advisor review desk. The assessment is a directional screening aid, not a valuation, a verified due-diligence report, or a probability of closing a sale.
+
+## The problem Vetted solves
+
+An early sale discussion often starts with revenue and an asking price, while operational questions arrive later. A prospective buyer or advisor also needs to understand whether the company can function without its founder, who owns customer relationships, whether financial statements are usable, how concentrated the customer base is, and whether people, assets, contracts, and processes can transfer. A business owner may have no concise way to see these readiness issues. An advisor may receive a different set of documents and anecdotes from every prospect, making opportunities hard to compare and decisions hard to explain.
+
+Vetted turns that fragmented intake into one shared sequence: the owner enters a company profile and answers ten structured questions; the app calculates a transparent readiness index; the owner sees a plain-language band; the advisor sees the source answers, driver strengths and concerns, and a corresponding risk band; and the advisor records an accept, reject, or clarification decision. The owner can see the decision in their portal and respond to a clarification request. The value is a consistent starting point and a visible next step. Self-reported answers still require independent verification before any transaction advice or due diligence.
 
 ## System at a glance
 
@@ -23,7 +29,7 @@ The application is one Python process. Streamlit reruns the relevant page script
 | File | Responsibility |
 | --- | --- |
 | [app.py](app.py) | Sets Streamlit page configuration, initializes SQLite, and registers the three URL routes. |
-| [pages/](pages) | Small route entrypoints that call the matching rendering function. |
+| [pages/](pages) | Route entrypoints that set a wide layout and route-specific browser title before calling the matching rendering function. |
 | [ui.py](ui.py) | Home page, login/signup, owner wizard and result, advisor pipeline and client audit, session state, and actions. |
 | [scoring.py](scoring.py) | The ten required answer keys, point values, readiness thresholds, and inverse advisor risk band. |
 | [data.py](data.py) | The ten question prompts and answer choices, plus three fictional seed clients. The questions were transcribed from the supplied workbook. |
@@ -36,11 +42,11 @@ The application is one Python process. Streamlit reruns the relevant page script
 
 | URL | Audience | Behavior |
 | --- | --- | --- |
-| / | Everyone | Company landing page and links to each portal. |
+| / | Everyone | Product landing page: the problem, an illustrative qualification screen, five-stage process, interactive role previews, scoring method, and portal entry points. |
 | /advisor | Advisor | Login when signed out; otherwise pipeline, search/filter/sort, client audit, and decision history. |
 | /business | Business owner | Login or signup when signed out; otherwise the ten-question wizard or a readiness result with advisor updates and clarification replies. |
 
-The route registry uses Streamlit's st.navigation with the navigation menu hidden. Role-specific headers do not offer a cross-role dashboard switch. The Vetted mark and wordmark share one home link.
+The route registry uses Streamlit's st.navigation with the navigation menu hidden. Role-specific headers do not offer a cross-role dashboard switch. The Vetted mark and wordmark share one native Streamlit page link to the home route. This uses Streamlit navigation so a click from /advisor or /business updates the browser address to /, including on Community Cloud.
 
 The UI records auth_role and auth_user in Streamlit session state. Each protected rendering function checks auth_role before showing its workspace. A successful login stores only the user fields needed by the UI, not the password hash. Sign-out clears authentication, selected client, and unfinished wizard state. Navigation to another role does not grant access to that role.
 
@@ -63,6 +69,16 @@ The homepage uses a product preview, direct calls to the two role-specific route
 The advisor score rail uses the numeric score as its fill width. A 15-point score therefore fills 15% of the rail. Color conveys the readiness/risk band but the score and risk label remain visible as text. Driver cards always show the submitted answer and its point contribution.
 
 "Manage app" at the lower-right of the deployed page is Streamlit Community Cloud's management control for a signed-in workspace member, outside Vetted's page markup. It provides access to Cloud logs and settings; Vetted does not render or configure it. See [Streamlit's app management documentation](https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app).
+
+## Interface and interaction design
+
+The public page leads with the concrete problem behind an early M&A discussion, then shows an illustrative client assessment. Three cards explain the owner, advisor, and shared-record problems. A five-stage path explains what happens from profile creation to decision. Interactive tabs preview each role without exposing private data, and a scoring strip states the 10/5/0-point rule and directional nature of the result. Sample values in the preview are explicitly marked illustrative.
+
+The visual system uses a near-black canvas, amber for primary actions and active navigation, cyan for numerical information, green for stronger signals and accepted decisions, and red for concerns and rejected decisions. Monospaced typography, compact terminal-like labels, strong section hierarchy, restrained borders, and responsive layouts give the interface its market-terminal character. The interface is inspired by that visual language and does not claim Bloomberg affiliation.
+
+Advisor pipeline rows remain searchable and filterable. The client audit combines profile metrics, a connected four-step workflow, score/risk summary, signal mix, grouped drivers, questionnaire, and decision history. The owner workspace keeps the overall band prominent and puts status, updates, a clarification reply, and the read-only questionnaire in clear sections. Buttons for the three advisor outcomes have distinct colors as well as text labels. Each route explicitly sets wide layout to prevent Streamlit from reverting to its centered width after a page switch. The built-in Streamlit sidebar is hidden; the app's own navigation and role-specific header remain visible. On narrow screens, horizontal groups stack into a vertical reading order.
+
+The logo is a single native `st.page_link` containing the mark and VETTED wordmark. Its image is embedded from `assets/vetted-mark.png` and its destination is the registered home route. This avoids a plain HTML anchor that can navigate only the embedded app frame on Streamlit Community Cloud, leaving the outer address at /advisor.
 
 ## Data model
 

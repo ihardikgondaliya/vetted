@@ -80,14 +80,9 @@ def render_header(role: str = "home") -> None:
     brand, controls = st.columns([3.7, 1.8], vertical_alignment="center")
     with brand:
         mark_png = base64.b64encode((APP_DIR / "assets" / "vetted-mark.png").read_bytes()).decode("ascii")
-        html(
-            '<a class="brand-lockup" href="/" aria-label="Vetted home">'
-            f'<img src="data:image/png;base64,{mark_png}" alt="" width="46" height="46">'
-            '<span class="brand-copy">'
-            '<span class="brand-name">VETTED<span>.</span></span>'
-            '<span class="brand-caption">DEAL READINESS, MADE CLEAR</span>'
-            '</span></a>'
-        )
+        html(f'<style>:root {{--vetted-mark: url("data:image/png;base64,{mark_png}");}}</style>')
+        with st.container(key="brand_home"):
+            st.page_link("pages/home.py", label="VETTED.", help="Go to Vetted home")
     with controls:
         if role == "home":
             advisor, owner = st.columns(2)
@@ -114,114 +109,176 @@ def section_label(text: str, number: str | None = None) -> None:
 
 def render_home() -> None:
     render_header("home")
-    hero_text, hero_visual = st.columns([1.12, 0.88], gap="large", vertical_alignment="center")
+    html(
+        '<div class="home-marketline"><span><i></i> VETTED / PRE-DEAL INTELLIGENCE</span>'
+        '<span>OWNER ASSESSMENT <b>/</b> ADVISOR REVIEW <b>/</b> DECISION RECORD</span></div>'
+    )
+
+    hero_text, hero_visual = st.columns([1.04, 0.96], gap="large", vertical_alignment="center")
     with hero_text:
         html(
-            '<div class="eyebrow hero-eyebrow"><i></i>A STRUCTURED START TO THE SALE CONVERSATION</div>'
-            '<div class="hero-title">Better decisions<br>begin&nbsp;<em>before</em> the deal.</div>'
-            '<p class="hero-copy">Vetted helps business owners understand sale readiness and gives '
-            'M&A advisors a consistent way to qualify opportunities. One focused assessment, '
-            'two views, and a clearer next step.</p>'
+            '<div class="home-hero-kicker">A CLEARER START TO THE SALE CONVERSATION</div>'
+            '<div class="home-hero-title">Know the business.<br><em>Before the deal.</em></div>'
+            '<p class="home-hero-copy">A revenue number cannot tell you who owns customer relationships, '
+            'whether the team can operate without the founder, or what a buyer will find in diligence. '
+            'Vetted brings the questions that matter into one focused assessment, so owners understand '
+            'what needs work and advisors can qualify opportunities with a consistent record.</p>'
         )
-        start, advisor = st.columns([1.15, 1])
-        if start.button("ASSESS YOUR BUSINESS →", type="primary", use_container_width=True):
+        start, advisor = st.columns([1.12, 1], gap="small")
+        if start.button("ASSESS YOUR BUSINESS", key="home_hero_owner", type="primary", use_container_width=True):
             st.switch_page("pages/business.py")
-        if advisor.button("ADVISOR ACCESS", use_container_width=True):
+        if advisor.button("ENTER ADVISOR DESK", key="home_hero_advisor", use_container_width=True):
             st.switch_page("pages/advisor.py")
         html(
-            '<div class="hero-facts">'
-            '<div><strong>10</strong><span>VETTING SIGNALS</span></div>'
-            '<div><strong>03</strong><span>READINESS BANDS</span></div>'
-            '<div><strong>01</strong><span>SHARED RECORD</span></div>'
-            '</div>'
+            '<div class="home-hero-proof"><span><b>10</b> STRUCTURED SIGNALS</span>'
+            '<span><b>02</b> PURPOSE-BUILT VIEWS</span>'
+            '<span><b>01</b> SHARED DECISION RECORD</span></div>'
         )
     with hero_visual:
         html(
-            '<div class="terminal"><div class="terminal-head"><span>V / READINESS ENGINE</span>'
-            '<span class="live-dot"></span></div>'
-            '<div class="terminal-overline">ILLUSTRATIVE ASSESSMENT</div>'
-            '<div class="terminal-title">A clearer operating picture.</div>'
-            '<div class="terminal-statline"><div><strong>01</strong><span>OWNER INTAKE</span></div>'
-            '<div><strong>02</strong><span>ADVISOR REVIEW</span></div></div>'
-            '<div class="signal-row"><span>OWNER DEPENDENCE</span><div class="signal-track"><i style="width:78%"></i></div><b>01</b></div>'
-            '<div class="signal-row"><span>FINANCIAL CLARITY</span><div class="signal-track"><i style="width:62%"></i></div><b>02</b></div>'
-            '<div class="signal-row"><span>CUSTOMER MIX</span><div class="signal-track"><i style="width:44%"></i></div><b>03</b></div>'
-            '<div class="signal-row"><span>TRANSFERABILITY</span><div class="signal-track"><i style="width:70%"></i></div><b>04</b></div>'
-            '<div class="terminal-bottom"><span>IDENTIFY THE SIGNALS</span><span>→</span><span>DECIDE THE NEXT STEP</span></div></div>'
+            '<div class="home-screen" aria-label="Illustrative Vetted assessment preview">'
+            '<div class="home-screen-top"><span><i></i> V / QUALIFICATION SCREEN</span>'
+            '<span>ILLUSTRATIVE DATA</span></div>'
+            '<div class="home-screen-main"><div class="home-screen-id">SAMPLE BUSINESS / 001</div>'
+            '<div class="home-screen-company">Aster Precision Works</div>'
+            '<div class="home-screen-industry">MANUFACTURING <span>/</span> PRE-DEAL ASSESSMENT</div>'
+            '<div class="home-screen-score"><div><small>READINESS INDEX</small>'
+            '<strong>65<em>/100</em></strong></div><div><span class="home-screen-band">MEDIUM READINESS</span>'
+            '<p>4 strong / 5 mixed / 1 needs attention</p></div></div>'
+            '<div class="home-screen-section">SIGNAL DETAIL <span>CONTRIBUTION</span></div>'
+            '<div class="home-screen-row"><span>OWNER INDEPENDENCE</span><i class="positive"></i><b>STRONG</b></div>'
+            '<div class="home-screen-row"><span>FINANCIAL QUALITY</span><i class="caution"></i><b>MIXED</b></div>'
+            '<div class="home-screen-row"><span>CUSTOMER CONCENTRATION</span><i class="negative"></i><b>ATTENTION</b></div>'
+            '<div class="home-screen-row"><span>PROCESS TRANSFERABILITY</span><i class="caution"></i><b>MIXED</b></div>'
+            '</div><div class="home-screen-bottom"><span>EXPLAINABLE SIGNALS</span>'
+            '<span>OWNER VIEW + ADVISOR VIEW</span></div></div>'
         )
 
-    html('<div class="home-divider"></div>')
-    section_label("WHAT VETTED DOES", "01")
+    html('<div class="home-section-rule"></div>')
     html(
-        '<div class="section-intro">A practical first look at the business behind the numbers.</div>'
-        '<p class="section-copy">Selling a business involves more than a headline revenue figure. '
-        'Vetted brings operating, financial, customer, legal, and transfer questions into '
-        'one structured intake, so both sides can start with the same facts.</p>'
+        '<div class="home-section-kicker">01 / THE PROBLEM</div>'
+        '<div class="home-section-headline">Most sale conversations start with the number.<br>'
+        '<em>The real questions arrive later.</em></div>'
+        '<p class="home-section-copy">Small-business owners may not know how a buyer will assess the '
+        'business beyond revenue. Advisors can receive incomplete or inconsistent intake information. '
+        'Questions about customer concentration, key people, financial records, legal exposure, and '
+        'transferable assets then surface across separate calls and documents. Vetted puts those '
+        'questions in front of both sides at the start.</p>'
     )
-    features = (
-        ("01", "Operating independence", "Understand whether the team can deliver and decide without the owner."),
-        ("02", "Financial visibility", "Surface the quality of statements and the direction of revenue."),
-        ("03", "Concentration and risk", "See exposure to key customers, people, and unresolved legal issues."),
-        ("04", "Transferability", "Check whether assets and documented processes can move with the business."),
+    problems = (
+        ("01", "BUSINESS OWNER", "Readiness feels opaque", "Know which operating strengths are clear and which areas may need attention before a sale process begins."),
+        ("02", "M&A ADVISOR", "Intake is hard to compare", "Review the same ten signals for every opportunity, with the original answers beside the calculated score."),
+        ("03", "THE CONVERSATION", "Decisions lack a shared record", "Keep the assessment, advisor decision, owner update, and clarification reply in one traceable workflow."),
     )
-    feature_cols = st.columns(4, gap="small")
-    for column, (number, title, description) in zip(feature_cols, features):
+    for column, (number, audience, title, copy) in zip(st.columns(3, gap="small"), problems):
         with column:
             html(
-                f'<div class="feature-card accent-{number}"><span>{number} / SIGNAL</span><h3>{escape(title)}</h3>'
-                f'<p>{escape(description)}</p></div>'
+                f'<div class="home-problem-card accent-{number}"><div><span>{number} / 03</span><b>{audience}</b></div>'
+                f'<h3>{escape(title)}</h3><p>{escape(copy)}</p></div>'
             )
 
-    html('<div class="home-divider"></div>')
-    section_label("HOW THE PLATFORM WORKS", "02")
-    steps = (
-        ("01", "Create your business profile", "Owners open a private account and enter basic company information."),
-        ("02", "Answer ten focused questions", "A guided assessment captures the choices from the supplied vetting framework."),
-        ("03", "Review and decide", "Owners see a simple readiness band; advisors see the full audit and record a decision."),
-    )
-    step_cols = st.columns(3, gap="medium")
-    for column, (number, title, description) in zip(step_cols, steps):
-        with column:
-            html(
-                f'<div class="process-card"><div class="process-index">{number}</div>'
-                f'<h3>{escape(title)}</h3><p>{escape(description)}</p></div>'
-            )
-
-    html('<div class="home-divider"></div>')
-    section_label("BUILT FOR BOTH SIDES", "03")
-    left, right = st.columns(2, gap="large")
-    with left:
-        html(
-            '<div class="audience-card owner"><span>FOR BUSINESS OWNERS</span><h3>Clarity without the deal jargon.</h3>'
-            '<p>Complete the assessment at your pace, see an overall High, Medium, or Low '
-            'readiness result, and keep a copy of your submitted answers.</p></div>'
-        )
-    with right:
-        html(
-            '<div class="audience-card advisor"><span>FOR M&A ADVISORS</span><h3>A repeatable qualification desk.</h3>'
-            '<p>Search the pipeline, review each answer, compare readiness percentages, '
-            'and record accept, reject, or clarification decisions.</p></div>'
-        )
-
-    with st.expander("What does the readiness result mean?"):
-        st.write(
-            "The result summarizes answers to ten qualification questions. It is a directional "
-            "screening tool, not a business valuation, transaction probability, or guarantee of a sale."
-        )
-    with st.expander("Why assess a business before a sale process?"):
-        st.write(
-            "Planning an ownership transfer includes understanding the business's value, assets, "
-            "liabilities, and preparation needs. Vetted organizes a focused first-pass discussion."
-        )
-        st.link_button(
-            "Read SBA guidance on selling a business",
-            "https://www.sba.gov/counseling/manage-your-business/",
-        )
+    html('<div class="home-section-rule"></div>')
     html(
-        '<div class="home-footer"><div><strong>Start with the facts.</strong><span>Get a clearer view of what comes next.</span></div></div>'
+        '<div class="home-section-kicker">02 / THE WORKFLOW</div>'
+        '<div class="home-section-headline">One intake. A visible path forward.</div>'
+        '<p class="home-section-copy">The owner supplies the context. Vetted translates ten '
+        'self-reported signals into an explainable readiness band. The advisor reviews the drivers '
+        'and records a next step the owner can see.</p>'
     )
-    if st.button("CREATE A BUSINESS ACCOUNT →", key="home_final_cta", type="primary"):
+    stages = (
+        ("01", "Profile", "Company, industry, revenue, EBITDA, and team size."),
+        ("02", "Assessment", "Ten focused operating, financial, and transfer questions."),
+        ("03", "Readiness", "High, Medium, or Low from a transparent points rubric."),
+        ("04", "Advisor review", "Full answer audit, risk view, and driver breakdown."),
+        ("05", "Next step", "Accept, reject, or ask the owner for clarification."),
+    )
+    html(
+        '<div class="home-flow">' + ''.join(
+            f'<div class="home-flow-step"><span>{number}</span><h3>{escape(title)}</h3>'
+            f'<p>{escape(copy)}</p></div>' for number, title, copy in stages
+        ) + '</div>'
+    )
+
+    html('<div class="home-section-rule"></div>')
+    html(
+        '<div class="home-section-kicker">03 / TWO PURPOSE-BUILT VIEWS</div>'
+        '<div class="home-section-headline">Clarity for the owner. Depth for the advisor.</div>'
+        '<p class="home-section-copy">Each person sees the information needed for their decision. '
+        'The business owner gets a plain-language result and update history. The advisor gets '
+        'the score, the source answers, and a place to record an accountable decision.</p>'
+    )
+    owner_tab, advisor_tab = st.tabs(["BUSINESS OWNER VIEW", "M&A ADVISOR VIEW"])
+    with owner_tab:
+        left, right = st.columns([1.1, .9], gap="large", vertical_alignment="center")
+        with left:
+            html(
+                '<div class="home-role-kicker">PRIVATE OWNER WORKSPACE</div>'
+                '<div class="home-role-title">Know where you stand.<br>Know what happens next.</div>'
+                '<p class="home-role-copy">Create a business profile, answer the ten questions, '
+                'and see one overall readiness band. Your dashboard keeps the submitted answers '
+                'read-only and shows the latest advisor decision. If more detail is needed, '
+                'reply to the clarification request in the same portal.</p>'
+                '<div class="home-role-points"><span>01 / SIMPLE READINESS BAND</span>'
+                '<span>02 / PRIVATE ANSWER RECORD</span><span>03 / ADVISOR UPDATES</span></div>'
+            )
+            if st.button("OPEN OWNER PORTAL", key="home_role_owner", type="primary"):
+                st.switch_page("pages/business.py")
+        with right:
+            html(
+                '<div class="home-role-preview owner"><div>YOUR READINESS</div>'
+                '<strong>MEDIUM</strong><p>Your assessment is complete and ready for advisor review.</p>'
+                '<div class="home-role-status"><i></i> AWAITING ADVISOR REVIEW</div>'
+                '<small>ILLUSTRATIVE OWNER VIEW</small></div>'
+            )
+    with advisor_tab:
+        left, right = st.columns([1.1, .9], gap="large", vertical_alignment="center")
+        with left:
+            html(
+                '<div class="home-role-kicker">M&A ADVISOR DESK</div>'
+                '<div class="home-role-title">See the drivers.<br>Record the judgment.</div>'
+                '<p class="home-role-copy">Search a client pipeline, inspect profile metrics '
+                'and every submitted answer, and see which signals are strong, mixed, or need '
+                'attention. The score is a screening index; the decision remains with the advisor.</p>'
+                '<div class="home-role-points"><span>01 / CLIENT PIPELINE</span>'
+                '<span>02 / SCORE + DRIVER AUDIT</span><span>03 / DECISION HISTORY</span></div>'
+            )
+            if st.button("OPEN ADVISOR DESK", key="home_role_advisor", type="primary"):
+                st.switch_page("pages/advisor.py")
+        with right:
+            html(
+                '<div class="home-role-preview advisor"><div>QUALIFICATION SNAPSHOT</div>'
+                '<strong>65<span>%</span></strong><p>MEDIUM RISK / ILLUSTRATIVE CLIENT</p>'
+                '<div class="home-role-bars"><span>STRONG <b style="width:40%"></b> 04</span>'
+                '<span>MIXED <b style="width:50%"></b> 05</span>'
+                '<span>ATTENTION <b style="width:10%"></b> 01</span></div>'
+                '<small>EXPLAINABLE FROM THE TEN RESPONSES</small></div>'
+            )
+
+    html('<div class="home-section-rule"></div>')
+    html(
+        '<div class="home-section-kicker">04 / AN EXPLAINABLE ENGINE</div>'
+        '<div class="home-section-headline">A score you can trace back to the answer.</div>'
+        '<p class="home-section-copy">Every response contributes the same number of possible '
+        'points. The owner sees an overall readiness band; the advisor sees the 0-100 index '
+        'and the strong, mixed, and attention drivers behind it. This is a directional screening '
+        'tool, not a valuation or a predicted probability of sale.</p>'
+        '<div class="home-method"><div><b class="positive">10</b><span>POINTS / STRONG</span></div>'
+        '<div><b class="caution">05</b><span>POINTS / MIXED</span></div>'
+        '<div><b class="negative">00</b><span>POINTS / NEEDS ATTENTION</span></div>'
+        '<div class="home-method-result"><strong>10 SIGNALS</strong><span>SUM TO A 0-100 READINESS INDEX</span></div></div>'
+    )
+    html(
+        '<div class="home-final"><div><span>START WITH A CLEARER PICTURE</span>'
+        '<strong>Make the first conversation count.</strong>'
+        '<p>Bring the business, the signals, and the next step into one place.</p></div></div>'
+    )
+    owner_cta, advisor_cta, space = st.columns([1, 1, 1.3], gap="small")
+    if owner_cta.button("ASSESS YOUR BUSINESS", key="home_final_owner", type="primary", use_container_width=True):
         st.switch_page("pages/business.py")
+    if advisor_cta.button("ADVISOR SIGN IN", key="home_final_advisor", use_container_width=True):
+        st.switch_page("pages/advisor.py")
+    html('<div class="home-disclaimer">VETTED / M&A READINESS SCREENING / SELF-REPORTED INPUTS / ADVISOR DECISION REQUIRED</div>')
+
 
 
 def render_login(role: str) -> None:
@@ -233,18 +290,27 @@ def render_login(role: str) -> None:
             '<div class="eyebrow">'
             + ("OWNER PORTAL / PRIVATE ACCESS" if owner else "ADVISOR DESK / RESTRICTED ACCESS")
             + '</div><div class="login-title">'
-            + ("Make your next move<br><em>with clarity.</em>" if owner else "Welcome back,<br><em>advisor.</em>")
+            + ("Make your next move<br><em>with clarity.</em>" if owner else "Your next decision<br><em>starts here.</em>")
             + '</div><p class="login-copy">'
             + (
-                "Create an account to complete the ten-question assessment, or sign in to review your result."
-                if owner else "Sign in to review the client pipeline, questionnaire signals, and representation decisions."
+                "Create your business profile, complete the assessment, and return for advisor updates in one private workspace."
+                if owner else "Sign in to review client context, compare readiness drivers, and record the next step with a clear audit trail."
             )
             + "</p>"
         )
+        if owner:
+            stages = (("01", "BUSINESS PROFILE"), ("02", "TEN SIGNALS"),
+                      ("03", "READINESS RESULT"), ("04", "ADVISOR UPDATE"))
+        else:
+            stages = (("01", "CLIENT PIPELINE"), ("02", "DRIVER AUDIT"),
+                      ("03", "DECISION RECORD"), ("04", "OWNER UPDATE"))
         html(
-            '<div class="login-points"><div>01 <span>PRIVATE, ROLE-SCOPED ACCESS</span></div>'
-            '<div>02 <span>STRUCTURED TEN-QUESTION INTAKE</span></div>'
-            '<div>03 <span>PERSISTENT DECISION RECORD</span></div></div>'
+            '<div class="login-map"><div class="login-map-head">'
+            '<span>YOUR WORKSPACE</span><b>V / ACCESS</b></div>'
+            + ''.join(
+                f'<div class="login-map-row"><span>{number}</span><strong>{label}</strong>'
+                '<i></i></div>' for number, label in stages
+            ) + '</div>'
         )
     with panel:
         if owner:
@@ -363,8 +429,8 @@ def render_workflow(client: dict) -> None:
 def render_advisor_list(user: dict) -> None:
     clients = list_advisor_clients(user["firm_id"])
     html('<div class="eyebrow">ADVISOR DESK / PIPELINE</div>')
-    st.title("Client qualification")
-    st.caption("Search submitted opportunities, review risk signals, and record the next decision.")
+    st.title("Opportunity desk")
+    st.caption("Review the pipeline, inspect each driver, and record a clear next step.")
 
     submitted = [client for client in clients if client["submitted"]]
     decisions = sum(client["latest_decision"] is not None for client in clients)
@@ -379,6 +445,14 @@ def render_advisor_list(user: dict) -> None:
         with column:
             st.metric(label, value, help=note)
 
+    review_queue = sum(stage_for(client) in {"Awaiting decision", "Clarification received"} for client in clients)
+    queue_label = "opportunity" if review_queue == 1 else "opportunities"
+    html(
+        '<div class="pipeline-brief"><div><span>REVIEW QUEUE</span>'
+        f'<strong>{review_queue:02d} {queue_label} need advisor action</strong>'
+        '<p>New assessments and answered clarification requests appear here.</p></div>'
+        '<div class="pipeline-brief-end">PIPELINE / LIVE RECORDS</div></div>'
+    )
     section_label("PIPELINE EXPLORER", "01")
     search_col, stage_col, sort_col = st.columns([2.2, 1.2, 1.2])
     search = search_col.text_input("Search", placeholder="Company or industry", key="advisor_search").strip().casefold()
@@ -621,6 +695,9 @@ def render_owner_wizard(user: dict, client: dict) -> None:
     html('<div class="eyebrow">BUSINESS OWNER / READINESS ASSESSMENT</div>')
     st.title("Tell us about your business")
     st.caption(f'{client["business_name"]}  ·  Answer ten focused questions to see your readiness result.')
+    html('<div class="wizard-context"><span>ANSWER FOR TODAY</span>'
+         '<p>Choose the option that best reflects the business as it operates now. '
+         'Your responses are saved when you submit the full assessment.</p></div>')
     segments = "".join(
         f'<span class="{"done" if index < step else "current" if index == step else "upcoming"}"></span>'
         for index in range(len(questions))

@@ -48,7 +48,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
 
     app = AppTest.from_file("app.py").run()
     assert not app.exception
-    assert any("Better decisions" in item.value for item in app.get("html"))
+    assert any("Know the business." in item.value for item in app.get("html"))
     app.switch_page("pages/advisor.py").run()
     assert [field.label for field in app.text_input] == ["Username", "Password"]
     assert not any(button.label == "OWNER PORTAL" for button in app.button)
@@ -56,7 +56,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
     app.text_input[1].set_value("admin")
     app.button(key="FormSubmitter:login_advisor-SIGN IN →").click().run()
     assert not app.exception
-    assert [title.value for title in app.title] == ["Client qualification"]
+    assert [title.value for title in app.title] == ["Opportunity desk"]
     app.text_input[0].set_value("healthcare").run()
     assert [button.key for button in app.button if button.key.startswith("open_")] == ["open_2"]
     app.button(key="open_2").click().run()

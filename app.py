@@ -15,6 +15,7 @@ st.set_page_config(
 )
 init_db()
 
+# Each route also sets wide layout so page switches keep the same canvas width.
 st.navigation(
     [
         st.Page("pages/home.py", title="Vetted", url_path="", default=True),
