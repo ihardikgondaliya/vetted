@@ -1,11 +1,17 @@
 """Vetted application entry point and URL route registry."""
 
+from pathlib import Path
+
 import streamlit as st
 
 from database import init_db
 
 
-st.set_page_config(page_title="Vetted | Deal Readiness", page_icon="◆", layout="wide")
+st.set_page_config(
+    page_title="Vetted | Deal Readiness",
+    page_icon=Path(__file__).resolve().parent / "assets" / "vetted-mark.png",
+    layout="wide",
+)
 init_db()
 
 st.navigation(
