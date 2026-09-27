@@ -48,7 +48,7 @@ Backend access checks matter as well: advisor list and detail queries are constr
 
 ## Interface design
 
-The interface keeps a terminal-like visual language but uses clear labels and spacing for a classroom audience. [styles.css](styles.css) defines the shared presentation layer; [ui.py](ui.py) renders the pages. The header mark is the raster [assets/vetted-mark.png](assets/vetted-mark.png), embedded as an image in the home link, with [assets/vetted-mark.svg](assets/vetted-mark.svg) retained as its vector source.
+The interface keeps a terminal-like visual language but uses clear labels and spacing for a classroom audience. [styles.css](styles.css) defines the shared presentation layer; [ui.py](ui.py) renders the pages. The header mark is the raster [assets/vetted-mark.png](assets/vetted-mark.png), embedded as an image in the home link and used as the browser favicon by app.py, with [assets/vetted-mark.svg](assets/vetted-mark.svg) retained as its vector source.
 
 | Visual token | Value | Use |
 | --- | --- | --- |
