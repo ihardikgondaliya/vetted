@@ -1,1 +1,2 @@
+# Pin the Streamlit runtime for a repeatable classroom deployment.
 streamlit==1.64.0
