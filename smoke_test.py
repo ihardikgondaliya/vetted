@@ -64,10 +64,13 @@ with tempfile.TemporaryDirectory() as temp_dir:
     ]
     assert [metric.value for metric in app.metric][:4] == ["$7.2M", "$1.1M", "42", "14.6%"]
     assert any("DRIVER BREAKDOWN" in item.value for item in app.get("html"))
-    assert any('class="score-track"' in item.value and 'width:60%' in item.value for item in app.get("html"))
+    assert any('class="score-track caution"' in item.value and 'width:60%' in item.value for item in app.get("html"))
+    assert any('class="timeline-panel"' in item.value and '03 / 04 COMPLETE' in item.value
+               and 'timeline-step current' in item.value for item in app.get("html"))
     assert any(tab.label == "MIXED (8)" for tab in app.tabs)
     app.button(key="action_clarification").click().run()
     assert get_advisor_client(2, admin["firm_id"])["latest_decision"]["decision"] == "clarification"
+    assert any("04 / 04 COMPLETE" in item.value for item in app.get("html"))
 
     # An advisor session cannot open an owner's private result.
     app.switch_page("pages/business.py").run()
@@ -87,6 +90,8 @@ with tempfile.TemporaryDirectory() as temp_dir:
     app.button(key="FormSubmitter:business_signup-CREATE ACCOUNT").click().run()
     assert not app.exception
     assert [title.value for title in app.title] == ["Tell us about your business"]
+    assert any('class="question-progress"' in item.value and 'aria-valuenow="1"' in item.value
+               for item in app.get("html"))
     owner = authenticate_business("sam@example.com", "ClassroomPass123!")
     assert owner is not None
     assert get_business_client(owner["id"])["score"] is None

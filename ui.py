@@ -113,7 +113,7 @@ def render_home() -> None:
     hero_text, hero_visual = st.columns([1.12, 0.88], gap="large", vertical_alignment="center")
     with hero_text:
         html(
-            '<div class="eyebrow">A STRUCTURED START TO THE SALE CONVERSATION</div>'
+            '<div class="eyebrow hero-eyebrow"><i></i>A STRUCTURED START TO THE SALE CONVERSATION</div>'
             '<div class="hero-title">Better decisions<br>begin&nbsp;<em>before</em> the deal.</div>'
             '<p class="hero-copy">Vetted helps business owners understand sale readiness and gives '
             'M&A advisors a consistent way to qualify opportunities. One focused assessment, '
@@ -124,13 +124,21 @@ def render_home() -> None:
             st.switch_page("pages/business.py")
         if advisor.button("ADVISOR ACCESS", use_container_width=True):
             st.switch_page("pages/advisor.py")
-        html('<div class="hero-foot">10 VETTING SIGNALS <span>·</span> 3 READINESS BANDS <span>·</span> 1 SHARED RECORD</div>')
+        html(
+            '<div class="hero-facts">'
+            '<div><strong>10</strong><span>VETTING SIGNALS</span></div>'
+            '<div><strong>03</strong><span>READINESS BANDS</span></div>'
+            '<div><strong>01</strong><span>SHARED RECORD</span></div>'
+            '</div>'
+        )
     with hero_visual:
         html(
             '<div class="terminal"><div class="terminal-head"><span>V / READINESS ENGINE</span>'
             '<span class="live-dot"></span></div>'
             '<div class="terminal-overline">ILLUSTRATIVE ASSESSMENT</div>'
             '<div class="terminal-title">A clearer operating picture.</div>'
+            '<div class="terminal-statline"><div><strong>01</strong><span>OWNER INTAKE</span></div>'
+            '<div><strong>02</strong><span>ADVISOR REVIEW</span></div></div>'
             '<div class="signal-row"><span>OWNER DEPENDENCE</span><div class="signal-track"><i style="width:78%"></i></div><b>01</b></div>'
             '<div class="signal-row"><span>FINANCIAL CLARITY</span><div class="signal-track"><i style="width:62%"></i></div><b>02</b></div>'
             '<div class="signal-row"><span>CUSTOMER MIX</span><div class="signal-track"><i style="width:44%"></i></div><b>03</b></div>'
@@ -156,7 +164,7 @@ def render_home() -> None:
     for column, (number, title, description) in zip(feature_cols, features):
         with column:
             html(
-                f'<div class="feature-card"><span>{number} / SIGNAL</span><h3>{escape(title)}</h3>'
+                f'<div class="feature-card accent-{number}"><span>{number} / SIGNAL</span><h3>{escape(title)}</h3>'
                 f'<p>{escape(description)}</p></div>'
             )
 
@@ -321,15 +329,31 @@ def _signup_form() -> None:
 
 
 def render_workflow(client: dict) -> None:
-    position = 4 if client["latest_decision"] else 3 if client["submitted"] else 1
-    labels = ("Profile created", "Form submitted", "Score calculated", "Advisor decision")
+    """Render the derived four-stage qualification timeline."""
+    complete_count = 4 if client["latest_decision"] else 3 if client["submitted"] else 1
+    steps = (
+        ("Business profile", "Company details captured"),
+        ("Questionnaire", "Ten owner responses"),
+        ("Readiness score", "Ten signals calculated"),
+        ("Advisor decision", "Representation outcome"),
+    )
     markup = []
-    for index, label in enumerate(labels, start=1):
-        state = "done" if index < position or (index == 4 and client["latest_decision"]) else "active" if index == position else "pending"
+    for index, (title, detail) in enumerate(steps, start=1):
+        state = "done" if index <= complete_count else "current" if index == complete_count + 1 else "upcoming"
+        label = "COMPLETE" if state == "done" else "IN PROGRESS" if state == "current" else "UP NEXT"
+        current = ' aria-current="step"' if state == "current" else ""
         markup.append(
-            f'<div class="flow-step {state}"><b>0{index}</b><span>{escape(label)}</span></div>'
+            f'<li class="timeline-step {state}"{current}>'
+            f'<div class="timeline-node"><span>{index:02d}</span></div>'
+            f'<div class="timeline-copy"><span class="timeline-state">{label}</span>'
+            f'<strong>{escape(title)}</strong><small>{escape(detail)}</small></div></li>'
         )
-    html('<div class="flow-track">' + "".join(markup) + "</div>")
+    html(
+        '<section class="timeline-panel" aria-label="Qualification timeline">'
+        '<div class="timeline-heading"><span>QUALIFICATION TIMELINE</span>'
+        f'<b>{complete_count:02d} / 04 COMPLETE</b></div>'
+        '<ol class="timeline-track">' + "".join(markup) + "</ol></section>"
+    )
 
 
 def render_advisor_list(user: dict) -> None:
@@ -378,14 +402,23 @@ def render_advisor_list(user: dict) -> None:
         score_text = f'{client["score"]}%' if client["score"] is not None else "PENDING"
         risk_text = f'{risk_band(client["score"])} RISK' if client["score"] is not None else "AWAITING ANSWERS"
         color = band_class(score_band(client["score"])) if client["score"] is not None else "neutral"
-        with st.container(border=True):
+        with st.container(border=True, key=f'pipeline_client_{client["id"]}'):
             main, industry, status, score, action = st.columns(
                 [2.8, 1.6, 1.8, 1.1, 1], vertical_alignment="center"
             )
             main.markdown(f"**{escape(client['business_name'])}**")
             main.caption(format_revenue(client["annual_revenue"]) + " annual revenue")
             industry.caption(client["industry"])
-            status.markdown(f'<span class="status-pill">{escape(stage)}</span>', unsafe_allow_html=True)
+            stage_tone = {
+                "Accepted": "accepted",
+                "Rejected": "rejected",
+                "Clarification requested": "clarification",
+                "Questionnaire open": "open",
+            }.get(stage, "awaiting")
+            status.markdown(
+                f'<span class="status-pill {stage_tone}">{escape(stage)}</span>',
+                unsafe_allow_html=True,
+            )
             score.markdown(
                 f'<div class="row-score {color}">{score_text}</div><div class="row-risk">{risk_text}</div>',
                 unsafe_allow_html=True,
@@ -405,7 +438,10 @@ def render_advisor_detail(user: dict, client_id: int) -> None:
         st.rerun()
     html('<div class="eyebrow">CLIENT AUDIT / ' + escape(stage_for(client)).upper() + '</div>')
     st.title(client["business_name"])
-    st.caption(client["industry"])
+    html(
+        f'<div class="client-meta"><span>{escape(client["industry"])}</span>'
+        f'<span>CLIENT {client["id"]:04d}</span><span>{escape(stage_for(client))}</span></div>'
+    )
     section_label("BUSINESS PROFILE")
     revenue = client["annual_revenue"]
     ebitda = client["ebitda"]
@@ -430,13 +466,14 @@ def render_advisor_detail(user: dict, client_id: int) -> None:
         left, right = st.columns([1.05, 0.95], gap="large")
         with left:
             html(
-                f'<div class="readiness-card"><div class="card-label">DEAL READINESS</div>'
+                f'<div class="readiness-card {color}"><div class="card-label">DEAL READINESS</div>'
                 f'<div class="readiness-number {color}">{score}<small>%</small></div>'
                 f'<div class="risk-label {color}">{risk.upper()} RISK</div>'
                 '<p>Higher readiness indicates fewer concerns across the ten vetting signals.</p></div>'
             )
             html(
-                f'<div class="score-track" role="progressbar" aria-label="Overall readiness" '
+                f'<div class="score-scale"><span>READINESS INDEX</span><b>{score} / 100</b></div>'
+                f'<div class="score-track {color}" role="progressbar" aria-label="Overall readiness" '
                 f'aria-valuemin="0" aria-valuemax="100" aria-valuenow="{score}">'
                 f'<i style="width:{score}%"></i></div>'
             )
@@ -549,7 +586,17 @@ def render_owner_wizard(user: dict, client: dict) -> None:
     html('<div class="eyebrow">BUSINESS OWNER / READINESS ASSESSMENT</div>')
     st.title("Tell us about your business")
     st.caption(f'{client["business_name"]}  ·  Answer ten focused questions to see your readiness result.')
-    st.progress((step + 1) / len(questions), text=f"Question {step + 1} of {len(questions)}")
+    segments = "".join(
+        f'<span class="{"done" if index < step else "current" if index == step else "upcoming"}"></span>'
+        for index in range(len(questions))
+    )
+    html(
+        f'<div class="question-progress-head"><span>ASSESSMENT PROGRESS</span>'
+        f'<b>{step + 1:02d} / {len(questions):02d}</b></div>'
+        f'<div class="question-progress" role="progressbar" aria-label="Assessment progress" '
+        f'aria-valuemin="0" aria-valuemax="{len(questions)}" aria-valuenow="{step + 1}">'
+        f'{segments}</div>'
+    )
     html(f'<div class="question-index">SIGNAL {step + 1:02d} / 10</div>')
     st.subheader(question["prompt"])
     choices = question["options"]
@@ -597,7 +644,7 @@ def render_owner_result(client: dict) -> None:
     overview, answers = st.tabs(["YOUR RESULT", "YOUR ANSWERS"])
     with overview:
         html(
-            f'<div class="owner-result"><div class="card-label">OVERALL SALE READINESS</div>'
+            f'<div class="owner-result {color}"><div class="card-label">OVERALL SALE READINESS</div>'
             f'<div class="owner-result-band {color}">{band.upper()}</div>'
             f'<p>{escape(messages[band])}</p><div class="result-meta">10 / 10 ANSWERS SUBMITTED</div></div>'
         )

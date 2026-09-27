@@ -40,11 +40,29 @@ The application is one Python process. Streamlit reruns the relevant page script
 | /advisor | Advisor | Login when signed out; otherwise pipeline, search/filter/sort, client audit, and decision history. |
 | /business | Business owner | Login or signup when signed out; otherwise the ten-question wizard or a read-only result. |
 
-The route registry uses Streamlit's st.navigation with the navigation menu hidden. Role-specific headers do not offer a cross-role dashboard switch. The Vetted brand links to the home page.
+The route registry uses Streamlit's st.navigation with the navigation menu hidden. Role-specific headers do not offer a cross-role dashboard switch. The Vetted mark and wordmark share one home link.
 
 The UI records auth_role and auth_user in Streamlit session state. Each protected rendering function checks auth_role before showing its workspace. A successful login stores only the user fields needed by the UI, not the password hash. Sign-out clears authentication, selected client, and unfinished wizard state. Navigation to another role does not grant access to that role.
 
 Backend access checks matter as well: advisor list and detail queries are constrained by firm_id; decision reads and writes verify firm membership; an owner record is found from the signed-in business user ID. The UI currently creates all new business accounts under the first seeded advisor firm.
+
+## Interface design
+
+The interface keeps a terminal-like visual language but uses clear labels and spacing for a classroom audience. [styles.css](styles.css) defines the shared presentation layer; [ui.py](ui.py) renders the pages. The header mark is the raster [assets/vetted-mark.png](assets/vetted-mark.png), embedded as an image in the home link, with [assets/vetted-mark.svg](assets/vetted-mark.svg) retained as its vector source.
+
+| Visual token | Value | Use |
+| --- | --- | --- |
+| Background | #08080A | Main canvas. |
+| Amber | #FFB100 | Actions, current step, selected tab, and key labels. |
+| Cyan | #00F0FF | Profile figures, identifiers, and secondary data. |
+| Green | #00FF66 | Strong signals and completed steps. |
+| Red | #F04B55; deep red #9B1C2A | Low-rated drivers, high-risk states, and rejected decisions. |
+
+The homepage uses a product preview, direct calls to the two role-specific routes, four capability cards, and a three-step explanation. Advisor pipeline rows have stage-specific badges. The owner wizard displays ten segments so progress corresponds to the ten required responses. Owner result panels change accent with the readiness band. The advisor detail groups company profile metrics, a connected qualification timeline, a score/risk summary, signal counts, and interactive driver tabs. The timeline is horizontal on wide screens and vertical on narrow screens.
+
+The advisor score rail uses the numeric score as its fill width. A 15-point score therefore fills 15% of the rail. Color conveys the readiness/risk band but the score and risk label remain visible as text. Driver cards always show the submitted answer and its point contribution.
+
+"Manage app" at the lower-right of the deployed page is Streamlit Community Cloud's management control for a signed-in workspace member, outside Vetted's page markup. It provides access to Cloud logs and settings; Vetted does not render or configure it. See [Streamlit's app management documentation](https://docs.streamlit.io/deploy/streamlit-community-cloud/manage-your-app).
 
 ## Data model
 
@@ -65,7 +83,7 @@ erDiagram
 | --- | --- | --- |
 | firms | Advisor firms. | Unique name. One firm is seeded today. |
 | advisor_users | Advisor username, firm, display name, email, password hash. | Unique username and case-insensitive unique email. |
-| clients | Business name, industry, annual revenue, annual EBITDA, employee count, owning firm. | Revenue and employee count must be nonnegative. EBITDA may be negative. |
+| clients | Business name, industry, annual revenue, annual EBITDA, employee count, owning firm. Money is stored as integer US dollars. | Revenue and employee count must be nonnegative. EBITDA may be negative. EBITDA and employee count can be NULL for legacy records that never supplied them. |
 | business_users | Owner login and the linked client. | Case-insensitive unique email. The current signup creates one client per new owner. |
 | questions | Stable field key, prompt, display order. | Unique key and order from 1 to 10. |
 | answer_options | High, medium, and low text and points for each question. | Rating and points constrained; unique question/rating pair. |
@@ -74,11 +92,21 @@ erDiagram
 
 SQLite foreign keys are enabled for each connection. Connection handling commits successful operations, rolls back exceptions, and closes the connection. Queries that use user input use SQL parameters. Indexes cover client lookup by firm, responses by client, and recent decisions by client.
 
-The schema permits multiple business_users rows for one client, although the present signup creates a fresh client for every new account. It also permits fewer or more than ten response rows at the database level; the application requires exactly ten before calculating a score or allowing an advisor decision.
+The schema permits multiple business_users rows for one client, although the present signup creates a fresh client for every new account. The database can hold an incomplete response set; the application requires exactly ten responses before calculating a score or allowing an advisor decision. The unique question order, constrained to 1 through 10, limits the seeded question bank to ten questions.
 
 On startup, init_db creates the directory and tables if needed. If there is no firm, it seeds one advisor firm, one advisor account, ten questions with three options each, and three fictional clients. Versioned user_version migrations update credentials from an earlier demo and add EBITDA and employee count to existing client tables. The three fictional clients are backfilled with sample profile details. Older owner-created rows keep NULL for fields they never supplied; the advisor view labels them Not provided rather than implying zero. Startup takes a SQLite BEGIN IMMEDIATE write lock before inspecting and migrating columns, so simultaneous Streamlit sessions cannot add the same column twice. Repeated startup calls do not duplicate the seed records.
 
 The default local database path is instance/vetted.sqlite3. VETTED_DB_PATH can override it, which the smoke test uses to isolate its temporary database.
+
+## Data movement
+
+1. The owner submits business profile fields and account credentials. create_business_account inserts one clients row and one linked business_users row in a single transaction.
+2. The owner wizard loads questions and their three answer choices from SQL. Draft ratings exist only in Streamlit session state until the owner submits all ten.
+3. submit_business_questionnaire validates the complete rating map with calculate_deal_score, then inserts one questionnaire_responses row per question in a transaction. The foreign key ensures each selected option belongs to its question.
+4. On each client read, database.py joins responses to questions and options, derives the readiness score, and returns the client profile, score, answers, and most recent advisor decision to ui.py.
+5. An advisor decision appends an advisor_decisions row. The pipeline stage uses the latest decision while the full history remains available.
+
+Profile dollars and employee count are stored separately from answers. No revenue, EBITDA, employee-count, or margin value enters the ten-question calculation.
 
 ## Readiness and risk calculation engine
 
@@ -103,14 +131,15 @@ The workbook-derived answer text lives in data.py. Each option has a qualitative
 
 ### Formula and bands
 
-Each question has equal weight. High contributes 10 points, medium 5, and low 0:
+Each question has equal weight. Let H, M, and L be the counts of high, medium, and low responses. A complete assessment has H + M + L = 10:
 
 ~~~text
-readiness_score = sum(points[rating] for each of the 10 answers)
-points = {high: 10, medium: 5, low: 0}
-maximum = 10 questions × 10 points = 100
-minimum = 0
+readiness_score = 10 x H + 5 x M + 0 x L
+minimum = 0; maximum = 100
+advisor_risk = inverse(readiness_band(readiness_score))
 ~~~
+
+The calculation uses the qualitative rating attached to each selected answer. It does not parse the answer text or infer additional points from financial profile fields.
 
 Possible scores are 0, 5, 10, ... 100. The score is displayed as a percentage to advisors because the maximum is 100 points; it is a normalized checklist score, not a measured sale probability. Annual revenue, EBITDA, employee count, and computed EBITDA margin are descriptive business profile fields; none contributes points to the scoring function.
 
@@ -123,6 +152,12 @@ Possible scores are 0, 5, 10, ... 100. The score is displayed as a percentage to
 score_band computes the readiness label. risk_band reverses that label for the advisor. There is no separate numerical risk model or probability estimate. A high readiness score therefore produces a low risk label. The owner sees only the High/Medium/Low result; the advisor sees the percentage and risk label.
 
 For example, eight high answers and two medium answers yield 8 × 10 + 2 × 5 = **90/100**, or High readiness and Low risk. The seeded client examples are Northstar at 90/Low risk, Harborlight at 60/Medium risk, and Cedar Ridge at 15/High risk.
+
+### Business profile and driver interpretation
+
+The advisor profile shows annual revenue, annual EBITDA, number of employees, and EBITDA margin. Margin is calculated for display as EBITDA / annual revenue x 100. If revenue is zero or EBITDA is unknown, the margin is N/A. The UI rounds money to one decimal place in millions; SQLite retains the entered whole-dollar values.
+
+The advisor overview sorts the ten submitted responses into Strong (high, 10 points), Mixed (medium, 5 points), and Needs Attention (low, 0 points). Each tab shows every matching driver with its question, selected answer, and score contribution. These groups explain the total; they are not separate weighted models. The signal-mix counts sum to ten for a submitted questionnaire.
 
 ### When a score is calculated
 
@@ -153,7 +188,7 @@ This is a simple, explainable intake rubric. It does not verify answers, weight 
 3. Selecting a client opens business profile metrics (revenue, EBITDA, employees, and EBITDA margin), workflow, score/risk, signal mix, a grouped driver breakdown, response audit, and decision history. The breakdown separates all ten answers into Strong (10 points), Mixed (5 points), and Needs Attention (0 points) tabs, with each prompt, selected answer, and point contribution visible.
 4. An advisor can append an accepted, rejected, or clarification decision with an optional note up to 1,000 characters, but only after all ten answers exist. The latest decision determines the pipeline stage; previous decisions remain in history.
 
-The workflow bar is derived rather than persisted as separate events. A new profile starts at Profile created; ten responses advance it to Score calculated; any decision advances it to Advisor decision. The second step, Form submitted, is marked complete at the same time as the score because submission and scoring happen together. There is no email delivery, form-sent event, or advisor notification service.
+The connected timeline is derived rather than persisted as separate events. Immediately after signup, Business profile is complete and Questionnaire is current. After the ten answers are submitted, Business profile, Questionnaire, and Readiness score are complete, while Advisor decision is current. Once an advisor records a decision, all four steps are complete. Submission and scoring occur together, so there is no separately timed calculation event. There is no email delivery, form-sent event, or advisor notification service.
 
 ## Authentication and security boundary
 
@@ -170,6 +205,6 @@ This is a demo security model: there is no email verification, password reset, l
 
 ## Verification and change points
 
-Run the local test with the command in [README.md](README.md). [smoke_test.py](smoke_test.py) uses a temporary database and exercises initial seeding, scoring outcomes for fixtures, login, owner signup with all business profile fields, questionnaire submission, advisor metrics and driver grouping, advisor decisions, role boundaries, persistence, and migration from a legacy client table, and concurrent startup against an old schema within that local test. It does not prove cloud storage durability or heavy concurrent usage.
+Run the local test with the command in [README.md](README.md). [smoke_test.py](smoke_test.py) uses temporary databases and exercises initial seeding, fixture scores, login, owner signup with business profile fields, questionnaire submission, the advisor timeline and driver grouping, advisor decisions, role boundaries, persistence, legacy-schema migration, and concurrent startup. It does not prove cloud storage durability or heavy concurrent usage.
 
 For changes to the rubric, update the question bank in data.py, the required keys/points/thresholds in scoring.py, and the database seed or migration path together. For historical auditability, store a scoring version and score snapshot at submission. For real deployments, move data to a managed database, secure advisor accounts, and add operational monitoring and backups.
